@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar.
+// ANTES de publicar, troque os e-mails abaixo pelos e-mails dos usuários criados em Authentication.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autorizado() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in [
+          'TROQUE-PELO-SEU-EMAIL@exemplo.com',
+          'outro-vistoriador@exemplo.com'
+        ];
+    }
+
+    // Tudo exige usuário autorizado. Qualquer outro acesso é negado.
+    match /{document=**} {
+      allow read, write: if autorizado();
+    }
+  }
+}
