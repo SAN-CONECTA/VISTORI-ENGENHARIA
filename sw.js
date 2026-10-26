@@ -1,4 +1,4 @@
-const CACHE = 'vistori-0.3.1';
+const CACHE = 'vistori-0.4.0';
 const SHELL = ['./', 'index.html', 'style.css', 'responsive.css', 'app.js', 'firebase-config.js', 'manifest.webmanifest', 'logo.png', 'logo-emblema.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

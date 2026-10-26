@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.3.1';
+const VERSION = '0.4.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const MODO = localStorage.getItem('vistori_modo') || 'nuvem';
@@ -652,7 +652,8 @@ function userBox() {
   const banner = $('#offline-banner');
   const online = navigator.onLine;
   if (sync) {
-    sync.classList.toggle('offline', MODO === 'local' || !online);
+    sync.classList.toggle('offline', !online);
+    sync.classList.toggle('local', MODO === 'local');
     sync.textContent = MODO === 'local' ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
   }
   if (banner) banner.hidden = MODO === 'local' || online;

@@ -46,6 +46,7 @@ a:hover{color:var(--c-dark)}
 .syncbox{height:32px;display:flex;align-items:center;gap:7px;padding:0 12px;border-radius:999px;background:var(--ok-bg);color:var(--ok);font-size:.78rem;font-weight:600;white-space:nowrap}
 .syncbox::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
 .syncbox.offline{background:var(--warn-bg);color:var(--warn)}
+.syncbox.local{background:var(--warn-bg);color:var(--warn)}
 .userbox{font-size:.8rem;color:var(--muted);text-align:right;min-width:0}
 .userbox small{display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
 .userbox a{margin-left:.4rem;font-weight:600}
