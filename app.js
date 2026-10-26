@@ -378,17 +378,43 @@ async function migrarLocal(prog) {
 /* ---------- início ---------- */
 async function inicio() {
   const [c, o, v] = await Promise.all([all('clientes'), all('obras'), all('vistorias')]);
+  const om = Object.fromEntries(o.map(x => [x.id, x]));
+  const agora = new Date();
+  const saudacao = agora.getHours() < 12 ? 'Bom dia' : agora.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
+  const dataExtenso = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const emAndamento = v.filter(x => x.status !== 'assinada');
+  const assinadas = v.filter(x => x.status === 'assinada');
+  const naoConformes = v.reduce((n, x) => n + (x.itens || []).filter(i => i.status === 'N').length, 0);
+  const semAvaliacao = v.reduce((n, x) => n + (x.itens || []).filter(i => !i.status).length, 0);
+  const recentes = [...v].sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).slice(0, 5);
   const aviso = MODO === 'local'
     ? '<div class="warn"><b>Modo local (teste):</b> os dados ficam somente neste aparelho/navegador.</div>'
     : '<div class="ok">Dados na nuvem (Firebase). Funciona offline: o que você salvar sem internet sobe sozinho quando a conexão voltar.</div>';
-  app.innerHTML = `<div class="card hero"><img src="logo.png" alt="VISTORI ENGENHARIA"></div>
+  const kpi = (href, titulo, valor, detalhe, tone = '') => `<a class="kpi-card ${tone}" href="${href}"><span>${titulo}</span><strong>${valor}</strong><small>${detalhe}</small><i>Ver detalhes →</i></a>`;
+  app.innerHTML = `<section class="dashboard-heading">
+    <div><h2>${saudacao}</h2><p>${dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1)}</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
+  </section>
   ${aviso}${await bannerMigracao()}
-  <div class="grid">
-    <div class="card"><div class="stat">${c.length}</div>Clientes</div>
-    <div class="card"><div class="stat">${o.length}</div>Imóveis/Obras</div>
-    <div class="card"><div class="stat">${v.filter(x => x.status !== 'assinada').length}</div>Vistorias em andamento</div>
-    <div class="card"><div class="stat">${v.filter(x => x.status === 'assinada').length}</div>Laudos assinados</div>
-  </div>`;
+  <section class="kpi-grid" aria-label="Resumo operacional">
+    ${kpi('#/vistorias', 'Vistorias em andamento', emAndamento.length, emAndamento.length ? 'Registros que ainda podem ser editados' : 'Nenhuma vistoria pendente')}
+    ${kpi('#/vistorias', 'Laudos assinados', assinadas.length, assinadas.length ? 'Documentos finalizados' : 'Nenhum laudo assinado', 'success')}
+    ${kpi('#/clientes', 'Clientes', c.length, `${o.length} imóvel(is) ou obra(s) vinculados`)}
+    ${kpi('#/vistorias', 'Não conformidades', naoConformes, semAvaliacao ? `${semAvaliacao} item(ns) ainda sem avaliação` : 'Todos os itens avaliados', naoConformes ? 'danger' : 'success')}
+  </section>
+  <section class="dashboard-grid">
+    <div class="card dashboard-recent"><div class="section-heading"><div><h3>Vistorias recentes</h3><p>Acompanhe os últimos registros do sistema.</p></div><a href="#/vistorias">Ver todas →</a></div>
+      <table><thead><tr><th>Data</th><th>Imóvel/Obra</th><th>Tipo</th><th>Status</th></tr></thead><tbody>
+      ${recentes.map(x => `<tr><td>${esc(x.data)}</td><td><a href="#/vistoria/${x.id}">${esc(om[x.obraId]?.nome || 'Não informado')}</a></td><td>${esc(x.tipo)}</td><td><span class="status-badge ${x.status === 'assinada' ? 'signed' : 'draft'}">${x.status === 'assinada' ? 'Assinada' : 'Em andamento'}</span></td></tr>`).join('') || '<tr><td colspan="4">Nenhuma vistoria cadastrada. Use o botão Nova vistoria para começar.</td></tr>'}
+      </tbody></table>
+    </div>
+    <aside class="card dashboard-summary"><div class="section-heading"><div><h3>Estrutura da base</h3><p>Cadastros usados nas vistorias.</p></div></div>
+      <a href="#/clientes"><span>Clientes cadastrados</span><b>${c.length}</b></a>
+      <a href="#/obras"><span>Imóveis e obras</span><b>${o.length}</b></a>
+      <a href="#/cadastros"><span>Gerenciar cadastros auxiliares</span><b>→</b></a>
+      <a href="#/backup"><span>Exportar cópia de segurança</span><b>→</b></a>
+    </aside>
+  </section>`;
 }
 
 /* ---------- vistorias ---------- */
