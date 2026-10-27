@@ -793,7 +793,7 @@ async function orcamento(id) {
   const cliente = obra ? await get('clientes', obra.clienteId) : null;
   const t = orcTotais(o);
   const statusAcoes = [['Enviado', 'Marcar como enviado'], ['Aprovado', 'Aprovar'], ['Recusado', 'Recusar']].filter(([s]) => s !== o.status).map(([s, l]) => `<a class="btn ghost" href="#" data-orc-status="${s}" data-orc-status-id="${o.id}">${l}</a>`).join('');
-  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<button type="button" class="btn" id="orc-enviar">Enviar ao cliente</button><button type="button" class="btn ghost" id="orc-copiar">Copiar link</button><a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
   ${o.status === 'Aprovado' ? '<div class="ok">Orçamento aprovado. Agende a visita para iniciar a vistoria.</div>' : ''}
   <div class="card laudo proposta">
     <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
@@ -810,7 +810,34 @@ async function orcamento(id) {
     </div>
     ${o.condicoes ? `<p><b>Condições de pagamento:</b> ${esc(o.condicoes)}</p>` : ''}
     ${o.observacoes ? `<p><b>Observações:</b> ${esc(o.observacoes)}</p>` : ''}
+  </div>
+  <div class="card noprint">
+    <div class="section-heading"><div><h3>Aprovação do cliente</h3><p>Registre a decisão do cliente sobre esta proposta.</p></div></div>
+    ${o.aprovacaoCliente ? `<p class="ok">Cliente ${o.aprovacaoCliente.status === 'Aprovado' ? 'aprovou' : 'recusou'} em ${fmt(o.aprovacaoCliente.em)}.</p>` : ''}
+    <div class="row"><button type="button" class="btn" id="orc-aprovar">Cliente aprovou</button><button type="button" class="btn ghost" id="orc-recusar">Cliente recusou</button></div>
   </div>`;
+  const enviar = $('#orc-enviar');
+  if (enviar) enviar.onclick = async () => {
+    await put('orcamentos', { ...o, status: (o.status === 'Aprovado' || o.status === 'Recusado') ? o.status : 'Enviado', atualizado: new Date().toISOString() });
+    const assunto = encodeURIComponent(`Proposta ${o.numero || ''} — VISTORI ENGENHARIA`);
+    const corpo = encodeURIComponent(`Olá ${cliente?.nome || ''},\n\nSegue a proposta ${o.numero || ''} no valor de ${brl(t.tot)}.\nServiço: ${o.tipo || ''}\nImóvel: ${obra?.nome || ''}\nValidade: ${o.validade ? dataBR(o.validade) : '—'}\n\nAtenciosamente,\nVISTORI ENGENHARIA`);
+    render();
+    try { window.open(`mailto:${cliente?.email || ''}?subject=${assunto}&body=${corpo}`, '_blank'); } catch (e) {}
+  };
+  const copiar = $('#orc-copiar');
+  if (copiar) copiar.onclick = async () => {
+    try { await navigator.clipboard.writeText(location.href); copiar.textContent = 'Link copiado!'; } catch (e) { alert('Copie o link: ' + location.href); }
+  };
+  const aprov = $('#orc-aprovar');
+  if (aprov) aprov.onclick = async () => {
+    await put('orcamentos', { ...o, status: 'Aprovado', aprovacaoCliente: { status: 'Aprovado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    render();
+  };
+  const recus = $('#orc-recusar');
+  if (recus) recus.onclick = async () => {
+    await put('orcamentos', { ...o, status: 'Recusado', aprovacaoCliente: { status: 'Recusado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    render();
+  };
 }
 
 const hf = (v, k, l, type = 'text') => `<div><label>${l}</label><input type="${type}" ${type === 'number' ? 'step="any" min="0"' : ''} data-h="${k}" value="${esc(v[k])}"></div>`;
