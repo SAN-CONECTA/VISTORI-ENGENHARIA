@@ -237,6 +237,11 @@ td input[type=number]{min-width:96px}
 .cal-ev.st-concluída{background:var(--ok-bg);color:var(--ok)}
 .cal-ev.st-cancelada{background:var(--bad-bg);color:var(--bad)}
 .cal-more{color:var(--subtle);font-size:.6rem}
+.recibo-num{display:flex;flex-wrap:wrap;gap:18px;color:var(--muted);margin:10px 0 0}
+.recibo-corpo{font-size:1.05rem;line-height:1.75;margin:26px 0}
+.recibo-ass{margin-top:64px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.recibo-ass span{width:280px;max-width:80%;border-top:1px solid var(--text)}
+.recibo-ass small{color:var(--subtle);font-size:.72rem;letter-spacing:.08em}
 .orc-itens input{min-width:90px}
 .orc-itens td:first-child input{min-width:180px}
 .orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}

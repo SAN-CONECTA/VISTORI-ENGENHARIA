@@ -1023,7 +1023,7 @@ async function financeiro(q) {
       <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option><option value="12">Últimos 12 meses</option></select>
     </div>
     <table><thead><tr><th>Descrição</th><th>Cliente/Imóvel</th><th>Origem</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="f-tbody">
-    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
+    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#/recibo/${r.id}">Recibo</a><a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
     <tr id="f-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
     </tbody></table>
   </div>`;
@@ -1080,6 +1080,28 @@ async function financeiro(q) {
   const b = $('#f-busca'); if (b) b.oninput = filtrar;
   const s = $('#f-status'); if (s) s.onchange = filtrar;
   const p = $('#f-periodo'); if (p) p.onchange = filtrar;
+}
+
+/* ---------- recibo ---------- */
+async function recibo(id) {
+  const o = await get('recebimentos', id);
+  if (!o) { app.innerHTML = '<div class="warn">Recibo não encontrado.</div>'; return; }
+  const obra = o.obraId ? await get('obras', o.obraId) : null;
+  const cliente = obra ? await get('clientes', obra.clienteId) : null;
+  const recs = await all('recebimentos');
+  const recebidos = recs.filter(r => r.status === 'Recebido' && r.pagoEm).sort((a, b) => (a.pagoEm || '').localeCompare(b.pagoEm || ''));
+  const seq = recebidos.findIndex(r => r.id === o.id) + 1;
+  const ano = new Date(o.pagoEm || Date.now()).getFullYear();
+  const numero = `REC-${ano}-${String(seq || 1).padStart(4, '0')}`;
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/financeiro">Voltar ao financeiro</a></div>
+  <div class="card laudo recibo">
+    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <h1>Recibo</h1>
+    <p class="recibo-num"><span><b>Nº:</b> ${esc(numero)}</span><span><b>Valor:</b> ${brl(o.valor)}</span><span><b>Data:</b> ${o.pagoEm ? fmt(o.pagoEm) : '—'}</span></p>
+    <p class="recibo-corpo">Recebi de <b>${esc(cliente?.nome || '—')}</b> a importância de <b>${brl(o.valor)}</b> referente a <b>${esc(o.descricao || 'serviços de engenharia')}</b>${obra ? ` — ${esc(obra.nome)}` : ''}.</p>
+    <p>Para clareza, firmo o presente recibo.</p>
+    <div class="recibo-ass"><span></span><small>VISTORI ENGENHARIA</small></div>
+  </div>`;
 }
 
 /* ---------- usuários e acessos ---------- */
@@ -1486,7 +1508,7 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r === 'recibo' ? 'financeiro' : r;
   document.querySelectorAll('#nav a').forEach(a => {
     const on = a.getAttribute('href') === `#/${navKey}`;
     a.classList.toggle('on', on);
@@ -1497,10 +1519,10 @@ async function render() {
     g.classList.toggle('has-active', ativo);
     if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
   });
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, usuarios, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, lgpd, usuarios, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
