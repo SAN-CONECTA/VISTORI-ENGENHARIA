@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.15.0';
+const VERSION = '0.15.1';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -415,7 +415,8 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'lixeira', 'auditoria', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  // lixeira/auditoria só existem a partir da v0.15 (não há dados antigos para migrar).
+  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -1100,7 +1101,8 @@ async function backup() {
     const ok = nuvem ? prompt('Isso APAGA TODOS os dados da nuvem e restaura o arquivo. Digite SUBSTITUIR para continuar.') === 'SUBSTITUIR'
       : confirm('Isso SUBSTITUI todos os dados atuais. Continuar?');
     if (!ok) return;
-    for (const s of STORES) { for (const x of await all(s)) await del(s, x.id); for (const x of d[s] || []) await put(s, x, nuvem); }
+    // A trilha de auditoria é imutável: não é apagada nem substituída na restauração.
+    for (const s of STORES) { if (s === 'auditoria') continue; for (const x of await all(s)) await del(s, x.id); for (const x of d[s] || []) await put(s, x, nuvem); }
     alert('Restaurado.'); location.hash = '#/'; render();
   };
 }
