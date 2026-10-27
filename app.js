@@ -1,17 +1,19 @@
 'use strict';
-const VERSION = '0.12.0';
+const VERSION = '0.13.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 const UNIDADES = ['un', 'h', 'm²', 'km', 'visita'];
+const GRAV = ['Baixa', 'Média', 'Alta', 'Crítica'];
+const PRAZOS = ['Imediato', '15 dias', '30 dias', '60 dias', '90 dias'];
 const CAD = ['cadastros', 'clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos'];
 const ST = { '': '— avaliar —', C: 'Conforme', N: 'Não conforme', NA: 'N/A' };
 const DEFAULT_CHECK = {
@@ -31,7 +33,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 8);
+  const r = indexedDB.open('vistori', 9);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -397,7 +399,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -865,12 +867,47 @@ function sigPad(c) {
   return { isEmpty: () => empty, clear: () => { x.clearRect(0, 0, c.width, c.height); empty = true; } };
 }
 
+function abrirMarcador(src, onSave) {
+  const box = document.createElement('div');
+  box.className = 'marker noprint'; box.id = 'marker';
+  box.innerHTML = `<div class="marker-panel"><div class="section-heading"><div><h3>Marcar sobre a foto</h3><p>Arraste sobre a imagem para destacar a anomalia.</p></div></div><div class="marker-wrap"><img id="marker-img" src="${src}" alt=""><canvas id="marker-canvas"></canvas></div><div class="row"><button type="button" class="btn ghost" id="marker-clear">Limpar</button><button type="button" class="btn" id="marker-save">Salvar marcação</button><button type="button" class="btn ghost" id="marker-cancel">Cancelar</button></div></div>`;
+  document.body.appendChild(box);
+  const img = box.querySelector('#marker-img');
+  const cv = box.querySelector('#marker-canvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false, painted = false;
+  const setup = () => {
+    cv.width = img.naturalWidth || img.width || 800;
+    cv.height = img.naturalHeight || img.height || 600;
+    const r = img.getBoundingClientRect();
+    cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  };
+  if (img.complete && img.naturalWidth) setup(); else img.onload = setup;
+  const pos = ev => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+  cv.onpointerdown = ev => { drawing = true; painted = true; const [x, y] = pos(ev); ctx.beginPath(); ctx.moveTo(x, y); try { cv.setPointerCapture(ev.pointerId); } catch (e) {} };
+  cv.onpointermove = ev => { if (!drawing) return; const [x, y] = pos(ev); ctx.lineWidth = Math.max(3, cv.width / 250); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#e53935'; ctx.lineTo(x, y); ctx.stroke(); };
+  cv.onpointerup = () => { drawing = false; };
+  box.querySelector('#marker-clear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); painted = false; };
+  box.querySelector('#marker-cancel').onclick = () => box.remove();
+  box.querySelector('#marker-save').onclick = async () => {
+    if (!painted) return alert('Faça uma marcação antes de salvar.');
+    const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height;
+    const o = out.getContext('2d');
+    o.drawImage(img, 0, 0, out.width, out.height);
+    o.drawImage(cv, 0, 0);
+    const dataUrl = out.toDataURL('image/jpeg', 0.7);
+    box.remove();
+    await onSave(dataUrl);
+  };
+}
+
 async function vistoria(id) {
   const v = await get('vistorias', id);
   if (!v) { app.innerHTML = '<div class="warn">Vistoria não encontrada.</div>'; return; }
   curV = v;
   const [obra, fm] = await Promise.all([get('obras', v.obraId), fotosMap(v)]);
   const cli = obra ? await get('clientes', obra.clienteId) : null;
+  const anomalias = (await all('anomalias')).filter(a => a.vistoriaId === v.id).sort((a, b) => (a.criado || '').localeCompare(b.criado || ''));
   const locked = v.status === 'assinada';
   let last = '';
   const itens = v.itens.map((it, i) => {
@@ -879,7 +916,7 @@ async function vistoria(id) {
     return `${hd}<div class="item"><h4>${esc(it.desc)}</h4>
     <select data-i="${i}" data-f="status">${Object.entries(ST).map(([k, l]) => `<option value="${k}" ${it.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <textarea data-i="${i}" data-f="obs" placeholder="Observações / descrição da anomalia">${esc(it.obs)}</textarea>
-    <div class="fotos">${it.fotos.map((f, j) => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><input data-i="${i}" data-j="${j}" data-f="legenda" placeholder="Legenda" value="${esc(f.legenda)}"><a href="#" data-rm="${i}:${j}">remover</a></div>`).join('')}</div>
+    <div class="fotos">${it.fotos.map((f, j) => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><input data-i="${i}" data-j="${j}" data-f="legenda" placeholder="Legenda" value="${esc(f.legenda)}"><a href="#" data-rm="${i}:${j}">remover</a>${locked ? '' : `<a href="#" data-marcar="${i}:${j}">marcar</a>`}</div>`).join('')}</div>
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
@@ -898,8 +935,33 @@ async function vistoria(id) {
       <label>Nome do responsável</label><input id="signNome" value="${esc(v.vistoriador)}">
       <label>Assinatura</label><canvas id="sig" width="840" height="300"></canvas>
       <div class="row"><button type="button" class="btn ghost" id="clr">Limpar</button><button type="button" class="btn" id="sign">Assinar e gerar laudo</button></div></div>`}
-  </fieldset>`;
+  </fieldset>
+  <div class="card"><div class="section-heading"><div><h3>Anomalias</h3><p>Gravidade, prazo e responsável pela correção.</p></div></div>
+    ${locked ? '' : `<form id="anom-form" class="grid">
+      ${fieldHtml({ k: 'titulo', l: 'Título', req: 1 }, '')}
+      ${fieldHtml({ k: 'gravidade', l: 'Gravidade', req: 1, opts: GRAV.map(g => [g, g]) }, 'Média')}
+      ${fieldHtml({ k: 'ambiente', l: 'Local / ambiente' }, '')}
+      ${fieldHtml({ k: 'prazo', l: 'Prazo para correção', opts: PRAZOS.map(p => [p, p]) }, '30 dias')}
+      ${fieldHtml({ k: 'responsavel', l: 'Responsável pela correção' }, '')}
+      <div><label>Foto (opcional)</label><input type="file" id="anom-foto" accept="image/*"></div>
+      <div style="grid-column:1/-1"><label>Descrição</label><textarea name="descricao" placeholder="Descreva a anomalia…"></textarea></div>
+      <div class="row" style="grid-column:1/-1"><button class="btn">Registrar anomalia</button></div>
+    </form>`}
+    <div class="anom-list">
+      ${anomalias.length ? anomalias.map(a => `<div class="anom"><div class="anom-head"><b>${esc(a.titulo)}</b><span class="grav grav-${esc((a.gravidade || '').toLowerCase())}">${esc(a.gravidade)}</span></div>${a.descricao ? `<p>${esc(a.descricao)}</p>` : ''}<div class="anom-meta"><span><b>Local:</b> ${esc(a.ambiente || '—')}</span><span><b>Prazo:</b> ${esc(a.prazo || '—')}</span><span><b>Responsável:</b> ${esc(a.responsavel || '—')}</span></div>${a.foto ? `<img class="anom-foto" src="${a.foto}" alt="">` : ''}<div class="row"><select data-anom-status="${a.id}">${['Aberta', 'Em correção', 'Corrigida'].map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><a href="#" data-del="anomalias:${a.id}">Excluir</a></div></div>`).join('') : '<p>Nenhuma anomalia registrada.</p>'}
+    </div>
+  </div>`;
   const c = $('#sig'); if (c) pad = sigPad(c);
+  const af = $('#anom-form');
+  if (af) af.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(af));
+    let foto = '';
+    const file = $('#anom-foto')?.files[0];
+    if (file) foto = await comprimir(file);
+    await put('anomalias', { id: uid(), vistoriaId: v.id, titulo: d.titulo, gravidade: d.gravidade || 'Média', ambiente: d.ambiente || '', descricao: d.descricao || '', prazo: d.prazo || '', responsavel: d.responsavel || '', status: 'Aberta', foto, criado: new Date().toISOString() });
+    vistoria(v.id);
+  };
 }
 
 /* ---------- laudo ---------- */
@@ -912,13 +974,14 @@ async function laudo(id) {
   const itens = v.itens || [];
   const versoes = (await all('versoes')).filter(x => x.vistoriaId === v.id).sort((a, b) => (a.reabertoEm || '').localeCompare(b.reabertoEm || ''));
   const nc = itens.filter(i => i.status === 'N');
+  const anomalias = (await all('anomalias')).filter(a => a.vistoriaId === v.id);
   const cats = [...new Set(itens.map(i => i.cat))];
   const catStats = cats.map(cat => { const arr = itens.filter(i => i.cat === cat); return { cat, c: arr.filter(i => i.status === 'C').length, n: arr.filter(i => i.status === 'N').length, na: arr.filter(i => i.status === 'NA').length, ne: arr.filter(i => !i.status).length }; });
   const objetivo = v.laudoObjetivo || 'Avaliar as condições de uso, manutenção e desempenho dos sistemas construtivos do imóvel, identificar anomalias e falhas e indicar as ações corretivas, com base nas diretrizes da ABNT NBR 16747 (Inspeção predial).';
   const metodologia = v.laudoMetodologia || 'Inspeção visual dos sistemas acessíveis, com aplicação de checklist padronizado por sistema e ambiente, registro fotográfico e classificação das anomalias. Não foram realizados ensaios destrutivos.';
   const recomendacoes = v.laudoRecomendacoes || (nc.length ? 'Corrigir as não conformidades apontadas, observando os prazos indicados e as recomendações técnicas de cada item.' : 'Manter o plano de manutenção preventiva e reavaliar os sistemas periodicamente.');
   const conclusao = v.laudoConclusao || (nc.length ? `Foram identificadas ${nc.length} não conformidade(s) entre os ${itens.length} itens avaliados. Recomenda-se a execução das correções indicadas e nova inspeção após os reparos.` : `Foram avaliados ${itens.length} itens e não foram identificadas não conformidades.`);
-  const resumo = `Foram avaliados ${itens.length} itens em ${cats.length} sistema(s). ${nc.length ? `Foram identificadas ${nc.length} não conformidade(s), que requerem correção.` : 'Não foram identificadas não conformidades.'}`;
+  const resumo = `Foram avaliados ${itens.length} itens em ${cats.length} sistema(s). ${nc.length ? `Foram identificadas ${nc.length} não conformidade(s), que requerem correção.` : 'Não foram identificadas não conformidades.'}${anomalias.length ? ` Foram registradas ${anomalias.length} anomalia(s) estruturada(s).` : ''}`;
   const fotoItens = itens.filter(i => (i.fotos || []).length);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(`Laudo ${v.numeroLaudo || v.id} | ${emp.razao || 'VISTORI ENGENHARIA'} | ${v.assinatura ? v.assinatura.hash : 'sem assinatura'}`)}`;
   app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/vistoria/${v.id}">Voltar à vistoria</a>${v.assinatura ? `<button class="btn ghost" id="verif" data-id="${v.id}">Verificar integridade</button>` : ''}</div>
@@ -940,7 +1003,7 @@ async function laudo(id) {
     ${catStats.map(x => `<tr><td>${esc(x.cat)}</td><td>${x.c}</td><td>${x.n}</td><td>${x.na}</td><td>${x.ne}</td></tr>`).join('')}
     </tbody></table>
     <h2>5. Não conformidades</h2>
-    ${nc.length ? nc.map(it => `<div class="item"><h4>${esc(it.desc)} <small>(${esc(it.cat)})</small></h4>${it.obs ? `<p>${esc(it.obs)}</p>` : ''}<div class="fotos">${(it.fotos || []).map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div></div>`).join('') : '<p>Nenhuma não conformidade registrada.</p>'}
+    ${(nc.length || anomalias.length) ? `${nc.map(it => `<div class="item"><h4>${esc(it.desc)} <small>(${esc(it.cat)})</small></h4>${it.obs ? `<p>${esc(it.obs)}</p>` : ''}<div class="fotos">${(it.fotos || []).map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div></div>`).join('')}${anomalias.map(a => `<div class="item"><h4>${esc(a.titulo)} <span class="grav grav-${esc((a.gravidade || '').toLowerCase())}">${esc(a.gravidade)}</span></h4>${a.descricao ? `<p>${esc(a.descricao)}</p>` : ''}<p><b>Local:</b> ${esc(a.ambiente || '—')} · <b>Prazo:</b> ${esc(a.prazo || '—')} · <b>Responsável:</b> ${esc(a.responsavel || '—')}</p>${a.foto ? `<div class="fotos"><div class="foto"><img src="${a.foto}" alt=""><small>${esc(a.titulo)}</small></div></div>` : ''}</div>`).join('')}` : '<p>Nenhuma não conformidade registrada.</p>'}
     <h2>6. Registro fotográfico</h2>
     ${fotoItens.length ? fotoItens.map(it => `<h4>${esc(it.desc)}</h4><div class="fotos">${(it.fotos || []).map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div>`).join('') : '<p>Sem registro fotográfico.</p>'}
     <h2>7. Recomendações</h2><p>${esc(recomendacoes)}</p>
@@ -1280,6 +1343,7 @@ app.addEventListener('change', async e => {
     }
     return;
   }
+  if (t.dataset.anomStatus) { const a = await get('anomalias', t.dataset.anomStatus); if (a) { await put('anomalias', { ...a, status: t.value }); render(); } return; }
   if (!curV) return;
   if (t.dataset.h) { curV[t.dataset.h] = t.value; await put('vistorias', curV); }
   else if (t.dataset.f) {
@@ -1327,6 +1391,19 @@ document.addEventListener('click', async e => {
     if (f.id) await del('fotos', f.id);
     curV.itens[i].fotos.splice(j, 1); await put('vistorias', curV);
     const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+  } else if (d.marcar) {
+    e.preventDefault();
+    const [i, j] = d.marcar.split(':').map(Number);
+    const f = curV.itens[i]?.fotos[j];
+    if (!f) return;
+    const src = f.src || (f.id ? (await get('fotos', f.id))?.src : '');
+    if (!src) return alert('Imagem não encontrada.');
+    abrirMarcador(src, async dataUrl => {
+      if (f.id) { const foto = await get('fotos', f.id); if (foto) await put('fotos', { ...foto, src: dataUrl }); }
+      else { f.src = dataUrl; }
+      await put('vistorias', curV);
+      const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+    });
   } else if (d.agendaIniciar) {
     e.preventDefault();
     const agendamento = await get('agendamentos', d.agendaIniciar);
