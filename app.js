@@ -1,13 +1,13 @@
 'use strict';
-const VERSION = '0.4.0';
+const VERSION = '0.7.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 3);
+  const r = indexedDB.open('vistori', 6);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -231,7 +231,7 @@ async function clientes(q) {
     { k: 'uf', l: 'UF', opts: UFS.map(u => [u, u]) },
     { k: 'observacoes', l: 'Observações', type: 'textarea' }
   ], [
-    { l: 'Cliente', fn: i => `${esc(i.nome)}<br><small>${esc(i.pessoa)} ${esc(i.documento)}</small>` },
+    { l: 'Cliente', fn: i => `<a href="#/cliente/${i.id}">${esc(i.nome)}</a><br><small>${esc(i.pessoa)} ${esc(i.documento)}</small>` },
     { l: 'Contato', fn: i => `${esc(i.telefone)}<br><small>${esc(i.email)}</small>` },
     { l: 'Imóveis', fn: i => n(i.id) }
   ], q, {
@@ -245,6 +245,43 @@ async function clientes(q) {
       <a class="btn ghost" href="#/obras?clienteId=${cur.id}">+ Novo imóvel/obra para este cliente</a></div>`;
     }
   });
+}
+
+/* ---------- 1.1.1 Ficha do cliente ---------- */
+async function cliente(id) {
+  const [c, os, vs] = await Promise.all([get('clientes', id), all('obras'), all('vistorias')]);
+  if (!c) { app.innerHTML = '<div class="warn">Cliente não encontrado.</div>'; return; }
+  const obras = os.filter(o => o.clienteId === id);
+  const vist = vs.filter(v => obras.some(o => o.id === v.obraId)).sort((a, b) => (b.criado || '').localeCompare(a.criado || ''));
+  const doc = [c.documento, c.pessoa].filter(Boolean).join(' · ');
+  const cidade = [c.cidade, c.uf].filter(Boolean).join('/');
+  const desde = c.criado ? new Date(c.criado).toLocaleDateString('pt-BR') : '—';
+  app.innerHTML = `<p class="noprint"><a href="#/clientes">← Clientes</a></p>
+  <section class="section-heading client-head"><div><h2>${esc(c.nome)}</h2><p>${esc(doc)}${cidade ? ' · ' + esc(cidade) : ''}</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/obras?clienteId=${encodeURIComponent(c.id)}">+ Novo imóvel/obra</a><a class="btn ghost" href="#/clientes?e=${encodeURIComponent(c.id)}">Editar</a></div></section>
+  <div class="grid">
+    <div class="card"><h3>Contato</h3>
+      ${c.fantasia ? `<p><b>Contato / responsável:</b> ${esc(c.fantasia)}</p>` : ''}
+      ${c.telefone ? `<p><b>Telefone:</b> ${esc(c.telefone)}</p>` : ''}
+      ${c.email ? `<p><b>E-mail:</b> ${esc(c.email)}</p>` : ''}
+      ${c.endereco ? `<p><b>Endereço:</b> ${esc(c.endereco)}</p>` : ''}
+      <p><b>Cliente desde:</b> ${esc(desde)}</p>
+      ${c.observacoes ? `<p><b>Observações:</b> ${esc(c.observacoes)}</p>` : ''}
+    </div>
+    <div class="card"><h3>Consentimento LGPD</h3>
+      ${c.consentimento ? `<p class="ok">Registrado em ${new Date(c.consentimento).toLocaleString('pt-BR')}</p>` : `<p class="warn">Sem registro de consentimento.</p><button class="btn" id="consentir">Registrar consentimento</button>`}
+    </div>
+  </div>
+  <div class="card"><h3>Imóveis / obras</h3>
+    ${obras.map(o => { const n = vist.filter(v => v.obraId === o.id).length; return `<div>${esc(o.nome)} <small>${esc(o.tipo)}${o.cidade ? ' · ' + esc(o.cidade) : ''} · ${n} vistoria(s)</small> · <a href="#/obras?e=${o.id}">abrir</a></div>`; }).join('') || '<p>Nenhum imóvel/obra vinculado.</p>'}
+  </div>
+  <div class="card"><h3>Histórico de vistorias</h3>
+    <table><thead><tr><th>Data</th><th>Imóvel/Obra</th><th>Tipo</th><th>Status</th><th></th></tr></thead><tbody>
+    ${vist.map(v => { const o = obras.find(x => x.id === v.obraId); return `<tr><td>${esc(v.data)}${v.hora ? ' ' + esc(v.hora) : ''}</td><td>${esc(o?.nome || '?')}</td><td>${esc(v.tipo)}</td><td>${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</td><td class="act"><a href="#/vistoria/${v.id}">Abrir</a><a href="#/laudo/${v.id}">Laudo</a></td></tr>`; }).join('') || '<tr><td colspan="5">Nenhuma vistoria.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  const btn = $('#consentir');
+  if (btn) btn.onclick = async () => { await put('clientes', { ...c, consentimento: new Date().toISOString() }); cliente(c.id); };
 }
 
 async function obras(q) {
@@ -360,7 +397,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -379,8 +416,9 @@ async function migrarLocal(prog) {
 
 /* ---------- início ---------- */
 async function inicio() {
-  const [c, o, v] = await Promise.all([all('clientes'), all('obras'), all('vistorias')]);
+  const [c, o, v, ag] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos')]);
   const om = Object.fromEntries(o.map(x => [x.id, x]));
+  const cm = Object.fromEntries(c.map(x => [x.id, x.nome]));
   const agora = new Date();
   const saudacao = agora.getHours() < 12 ? 'Bom dia' : agora.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
   const dataExtenso = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -389,16 +427,31 @@ async function inicio() {
   const naoConformes = v.reduce((n, x) => n + (x.itens || []).filter(i => i.status === 'N').length, 0);
   const semAvaliacao = v.reduce((n, x) => n + (x.itens || []).filter(i => !i.status).length, 0);
   const recentes = [...v].sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).slice(0, 5);
+  const hoje = agora.toISOString().slice(0, 10);
+  const visitasHoje = ag.filter(x => x.data === hoje && x.status !== 'Cancelada');
+  const proximos = ag.filter(x => x.data && x.data >= hoje && x.status !== 'Cancelada' && x.status !== 'Concluída').sort((a, b) => `${a.data} ${a.hora || ''}`.localeCompare(`${b.data} ${b.hora || ''}`)).slice(0, 5);
+  const atividades = [];
+  for (const x of v) { atividades.push({ ts: x.criado, tipo: 'vistoria', v: x }); if (x.assinatura?.ts) atividades.push({ ts: x.assinatura.ts, tipo: 'laudo', v: x }); }
+  for (const x of ag) atividades.push({ ts: x.criado, tipo: 'agenda', a: x });
+  const ultimas = atividades.filter(e => e.ts).sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 6);
+  const statusClass = s => 'agenda-' + String(s || '').toLowerCase().replace(/\s+/g, '-');
+  const evt = e => {
+    if (e.tipo === 'agenda') { const o = om[e.a.obraId]; return { icon: 'AG', txt: 'Visita agendada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${dataBR(e.a.data)} ${e.a.hora || ''}`.trim(), href: `#/agenda?e=${e.a.id}` }; }
+    const o = om[e.v.obraId];
+    if (e.tipo === 'laudo') return { icon: 'AS', txt: 'Laudo assinado', sub: `${o?.nome || 'Imóvel não encontrado'} · ${e.v.tipo}`, href: `#/laudo/${e.v.id}` };
+    return { icon: 'VI', txt: 'Vistoria criada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${e.v.tipo}`, href: `#/vistoria/${e.v.id}` };
+  };
   const aviso = MODO === 'local'
     ? '<div class="warn"><b>Modo local (teste):</b> os dados ficam somente neste aparelho/navegador.</div>'
     : '<div class="ok">Dados na nuvem (Firebase). Funciona offline: o que você salvar sem internet sobe sozinho quando a conexão voltar.</div>';
   const kpi = (href, titulo, valor, detalhe, tone = '') => `<a class="kpi-card ${tone}" href="${href}"><span>${titulo}</span><strong>${valor}</strong><small>${detalhe}</small><i>Ver detalhes →</i></a>`;
   app.innerHTML = `<section class="dashboard-heading">
     <div><h2>${saudacao}</h2><p>${dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1)}</p></div>
-    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
+    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/agenda?nova=1">Agendar visita</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
   </section>
   ${aviso}${await bannerMigracao()}
   <section class="kpi-grid" aria-label="Resumo operacional">
+    ${kpi('#/agenda', 'Visitas de hoje', visitasHoje.length, visitasHoje.length ? visitasHoje.map(x => x.hora).filter(Boolean).join(' e ') : 'Nenhuma visita agendada')}
     ${kpi('#/vistorias', 'Vistorias em andamento', emAndamento.length, emAndamento.length ? 'Registros que ainda podem ser editados' : 'Nenhuma vistoria pendente')}
     ${kpi('#/vistorias', 'Laudos assinados', assinadas.length, assinadas.length ? 'Documentos finalizados' : 'Nenhum laudo assinado', 'success')}
     ${kpi('#/clientes', 'Clientes', c.length, `${o.length} imóvel(is) ou obra(s) vinculados`)}
@@ -416,7 +469,89 @@ async function inicio() {
       <a href="#/cadastros"><span>Gerenciar cadastros auxiliares</span><b>→</b></a>
       <a href="#/backup"><span>Exportar cópia de segurança</span><b>→</b></a>
     </aside>
+  </section>
+  <section class="dashboard-grid">
+    <div class="card dashboard-upcoming">
+      <div class="section-heading"><div><h3>Próximos compromissos</h3><p>Visitas agendadas a partir de hoje.</p></div><a href="#/agenda">Ver agenda →</a></div>
+      ${proximos.length ? `<div class="agenda-mini">${proximos.map(x => { const obra = om[x.obraId]; return `<a class="agenda-mini-item" href="#/agenda?e=${encodeURIComponent(x.id)}"><span class="agenda-mini-when"><b>${dataBR(x.data)}</b><small>${esc(x.hora || '—')}</small></span><span class="agenda-mini-info"><b>${esc(obra?.nome || 'Imóvel não encontrado')}</b><small>${esc(cm[obra?.clienteId] || '')} · ${esc(x.tipo)}</small></span><span class="status-badge ${statusClass(x.status)}">${esc(x.status)}</span></a>`; }).join('')}</div>` : '<p>Nenhuma visita agendada para os próximos dias.</p>'}
+    </div>
+    <aside class="card dashboard-activity">
+      <div class="section-heading"><div><h3>Atividades recentes</h3><p>Últimos movimentos no sistema.</p></div></div>
+      ${ultimas.length ? `<ol class="timeline">${ultimas.map(e => { const d = evt(e); return `<li><span class="tl-code">${d.icon}</span><div><a href="${d.href}">${esc(d.txt)}</a><small>${esc(d.sub)}</small><em>${fmt(e.ts)}</em></div></li>`; }).join('')}</ol>` : '<p>Nenhuma atividade registrada ainda.</p>'}
+    </aside>
   </section>`;
+}
+
+/* ---------- agenda ---------- */
+const dataBR = data => data ? new Date(data + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+
+async function novaVistoriaDaAgenda(agendamento) {
+  const [obra, ts] = await Promise.all([get('obras', agendamento.obraId), getTipos()]);
+  if (!obra) throw new Error('O imóvel/obra deste agendamento não foi encontrado.');
+  const chk = await getCheck();
+  const itens = [];
+  for (const [cat, arr] of Object.entries(chk)) for (const desc of arr) itens.push({ cat, desc, status: '', obs: '', fotos: [] });
+  const tp = ts.find(t => t.nome === agendamento.tipo);
+  const pr = tp ? await get('precos', `${tp.id}|${obra.tipo}`) : null;
+  const v = {
+    id: uid(), obraId: obra.id, tipo: agendamento.tipo, data: agendamento.data, hora: agendamento.hora || '',
+    vistoriador: agendamento.responsavel || '', crea: '', artNumero: '', valor: pr ? pr.valor : '',
+    orientacoes: agendamento.observacoes || '', itens, status: 'rascunho', agendamentoId: agendamento.id, criado: new Date().toISOString()
+  };
+  await put('vistorias', v);
+  await put('agendamentos', { ...agendamento, vistoriaId: v.id, status: 'Em andamento', atualizado: new Date().toISOString() });
+  return v;
+}
+
+async function agenda(q) {
+  const [ags, os, cls, ts] = await Promise.all([all('agendamentos'), all('obras'), all('clientes'), getTipos()]);
+  const om = Object.fromEntries(os.map(o => [o.id, o]));
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const qp = new URLSearchParams(q || '');
+  const cur = ags.find(x => x.id === qp.get('e')) || (qp.has('nova') ? { obraId: qp.get('obraId') || '', tipo: qp.get('tipo') || '', data: qp.get('data') || '' } : {});
+  const mostrarForm = qp.has('nova') || !!cur.id;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const status = ['Agendada', 'Confirmada', 'Em andamento', 'Concluída', 'Cancelada'];
+  const ordenados = [...ags].sort((a, b) => `${a.data || ''} ${a.hora || ''}`.localeCompare(`${b.data || ''} ${b.hora || ''}`));
+  const opcaoObra = os.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || 'Cliente não informado'}`]);
+  app.innerHTML = `<section class="section-heading agenda-title"><div><h2>Agenda</h2><p>Organize visitas e inicie a vistoria usando os dados do agendamento.</p></div>
+    <a class="btn" href="#/agenda?nova=1">+ Agendar visita</a></section>
+  ${mostrarForm ? `<form id="agenda-form" class="card grid">
+    ${fieldHtml({ k: 'data', l: 'Data', type: 'date', req: 1 }, cur.data || hoje)}
+    ${fieldHtml({ k: 'hora', l: 'Horário', type: 'time', req: 1 }, cur.hora || '')}
+    ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', opts: opcaoObra, req: 1 }, cur.obraId || '')}
+    ${fieldHtml({ k: 'tipo', l: 'Tipo de serviço', opts: ts.map(t => [t.nome, t.nome]), req: 1 }, cur.tipo || '')}
+    ${fieldHtml({ k: 'responsavel', l: 'Responsável técnico' }, cur.responsavel || '')}
+    ${fieldHtml({ k: 'status', l: 'Status', opts: status.map(x => [x, x]), req: 1 }, cur.status || 'Agendada')}
+    ${fieldHtml({ k: 'observacoes', l: 'Observações', type: 'textarea' }, cur.observacoes || '')}
+    <div class="row agenda-form-actions"><button class="btn">${cur.id ? 'Salvar alterações' : 'Agendar visita'}</button><a class="btn ghost" href="#/agenda">Cancelar</a></div>
+  </form>` : ''}
+  ${!os.length ? '<div class="warn">Cadastre um cliente e um imóvel/obra antes de criar um agendamento.</div>' : ''}
+  <div class="card agenda-list">
+    <div class="agenda-filters"><input id="agenda-busca" placeholder="Buscar cliente, imóvel, serviço ou responsável…"><select id="agenda-status"><option value="">Todos os status</option>${status.map(x => `<option>${x}</option>`).join('')}</select></div>
+    <table><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Serviço</th><th>Responsável</th><th>Status</th><th></th></tr></thead><tbody id="agenda-tbody">
+    ${ordenados.map(x => { const obra = om[x.obraId]; return `<tr data-status="${esc(x.status)}"><td><b>${dataBR(x.data)}</b><br><small>${esc(x.hora)}</small></td><td>${esc(obra?.nome || 'Não encontrado')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(x.tipo)}</td><td>${esc(x.responsavel || '—')}</td><td><span class="status-badge agenda-${esc((x.status || '').toLowerCase().replace(/\s+/g, '-'))}">${esc(x.status)}</span></td><td class="act"><a href="#/agenda?e=${encodeURIComponent(x.id)}">Editar</a>${x.vistoriaId ? `<a href="#/vistoria/${encodeURIComponent(x.vistoriaId)}">Abrir vistoria</a>` : x.status !== 'Cancelada' ? `<a href="#" data-agenda-iniciar="${esc(x.id)}">Iniciar vistoria</a>` : ''}<a href="#" data-del="agendamentos:${esc(x.id)}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhuma visita agendada.</td></tr>'}
+    </tbody></table>
+  </div>`;
+
+  const filtrar = () => {
+    const texto = ($('#agenda-busca')?.value || '').toLowerCase();
+    const st = $('#agenda-status')?.value || '';
+    document.querySelectorAll('#agenda-tbody tr').forEach(row => {
+      if (row.querySelector('[colspan]')) return;
+      row.hidden = !!((texto && !row.textContent.toLowerCase().includes(texto)) || (st && row.dataset.status !== st));
+    });
+  };
+  $('#agenda-busca').oninput = filtrar;
+  $('#agenda-status').onchange = filtrar;
+  const form = $('#agenda-form');
+  if (form) form.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(form));
+    await put('agendamentos', { ...cur, ...d, id: cur.id || uid(), criado: cur.criado || new Date().toISOString(), atualizado: new Date().toISOString() });
+    location.hash = '#/agenda';
+    render();
+  };
 }
 
 /* ---------- vistorias ---------- */
@@ -424,15 +559,54 @@ async function vistorias() {
   const [vs, os, cls, ts] = await Promise.all([all('vistorias'), all('obras'), all('clientes'), getTipos()]);
   const om = Object.fromEntries(os.map(o => [o.id, o]));
   const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const tipos = [...new Set(vs.map(v => v.tipo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   app.innerHTML = `<h2>Vistorias</h2>
   ${os.length ? `<form id="nv" class="card grid">
     ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', req: 1, opts: os.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || ''}`]) })}
     ${fieldHtml({ k: 'tipo', l: 'Tipo de serviço', req: 1, opts: ts.map(t => [t.nome, t.nome]) })}
     <div><button class="btn">Nova vistoria</button></div></form>` : '<div class="warn">Cadastre um imóvel/obra primeiro em <a href="#/cadastros">Cadastros</a>.</div>'}
-  <div class="card"><table><thead><tr><th>Data</th><th>Imóvel/Obra</th><th>Tipo</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>
-  ${vs.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(v => `<tr><td>${esc(v.data)}</td><td>${esc(om[v.obraId]?.nome || '?')}</td><td>${esc(v.tipo)}</td><td>${brl(v.valor)}</td><td>${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</td>
-  <td class="act"><a href="#/vistoria/${v.id}">Abrir</a><a href="#/laudo/${v.id}">Laudo</a><a href="#" data-del="vistorias:${v.id}">Excluir</a></td></tr>`).join('') || '<tr><td colspan="6">Nenhuma vistoria.</td></tr>'}
-  </tbody></table></div>`;
+  <div class="card">
+    <div class="list-filters">
+      <input id="v-busca" placeholder="Buscar imóvel, cliente, serviço ou responsável…">
+      <select id="v-status"><option value="">Todos os status</option><option value="rascunho">Rascunho</option><option value="assinada">Assinada</option></select>
+      <select id="v-tipo"><option value="">Todos os tipos</option>${tipos.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select>
+      <select id="v-periodo"><option value="">Todo o período</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="mes">Este mês</option></select>
+    </div>
+    <p id="v-count" style="color:var(--subtle);font-size:.82rem;margin:0 0 10px"></p>
+    <table><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Tipo</th><th>Responsável</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="v-tbody">
+    ${vs.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(v => `<tr data-status="${esc(v.status)}" data-tipo="${esc(v.tipo)}" data-data="${esc(v.data)}"><td>${esc(v.data)}${v.hora ? ' ' + esc(v.hora) : ''}</td><td>${esc(om[v.obraId]?.nome || '?')}<br><small>${esc(cm[om[v.obraId]?.clienteId] || '')}</small></td><td>${esc(v.tipo)}</td><td>${esc(v.vistoriador || '—')}</td><td>${brl(v.valor)}</td><td><span class="status-badge ${v.status === 'assinada' ? 'signed' : 'draft'}">${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</span></td>
+    <td class="act"><a href="#/vistoria/${v.id}">Abrir</a><a href="#/laudo/${v.id}">Laudo</a><a href="#" data-del="vistorias:${v.id}">Excluir</a></td></tr>`).join('') || '<tr><td colspan="7">Nenhuma vistoria.</td></tr>'}
+    <tr id="v-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
+    </tbody></table>
+  </div>`;
+
+  const filtrar = () => {
+    const texto = ($('#v-busca')?.value || '').toLowerCase().trim();
+    const st = $('#v-status')?.value || '';
+    const tp = $('#v-tipo')?.value || '';
+    const per = $('#v-periodo')?.value || '';
+    const agora = new Date(); agora.setHours(0, 0, 0, 0);
+    const rows = [...document.querySelectorAll('#v-tbody tr[data-status]')];
+    rows.forEach(row => {
+      let ok = true;
+      if (texto && !row.textContent.toLowerCase().includes(texto)) ok = false;
+      if (st && row.dataset.status !== st) ok = false;
+      if (tp && row.dataset.tipo !== tp) ok = false;
+      if (per) {
+        const d = row.dataset.data ? new Date(row.dataset.data + 'T12:00:00') : null;
+        if (!d) ok = false;
+        else if (per === 'mes') { if (d.getMonth() !== agora.getMonth() || d.getFullYear() !== agora.getFullYear()) ok = false; }
+        else { const lim = new Date(agora); lim.setDate(lim.getDate() - Number(per)); if (d < lim) ok = false; }
+      }
+      row.hidden = !ok;
+    });
+    const visiveis = rows.filter(r => !r.hidden).length;
+    const vazio = $('#v-vazio'); if (vazio) vazio.hidden = !(rows.length > 0 && visiveis === 0);
+    const cnt = $('#v-count'); if (cnt) cnt.textContent = rows.length ? `Exibindo ${visiveis} de ${rows.length} vistoria(s)` : '';
+  };
+  $('#v-busca').oninput = filtrar;
+  ['v-status', 'v-tipo', 'v-periodo'].forEach(id => { const el = $('#' + id); if (el) el.onchange = filtrar; });
+  filtrar();
   const f = $('#nv');
   if (f) f.onsubmit = async e => {
     e.preventDefault();
@@ -443,10 +617,146 @@ async function vistorias() {
     const obra = om[d.obraId];
     const tp = ts.find(t => t.nome === d.tipo);
     const pr = tp && obra ? await get('precos', `${tp.id}|${obra.tipo}`) : null;
-    const v = { id: uid(), obraId: d.obraId, tipo: d.tipo, data: new Date().toISOString().slice(0, 10), vistoriador: '', crea: '', artNumero: '', valor: pr ? pr.valor : '', itens, status: 'rascunho', criado: new Date().toISOString() };
+    const v = { id: uid(), obraId: d.obraId, tipo: d.tipo, data: new Date().toISOString().slice(0, 10), hora: '', vistoriador: '', crea: '', artNumero: '', valor: pr ? pr.valor : '', orientacoes: '', itens, status: 'rascunho', criado: new Date().toISOString() };
     await put('vistorias', v);
     location.hash = `#/vistoria/${v.id}`;
   };
+}
+
+/* ---------- orçamentos ---------- */
+const ORC_STATUS = ['Rascunho', 'Enviado', 'Aprovado', 'Recusado'];
+const orcTotais = o => {
+  const sub = (o.itens || []).reduce((n, i) => n + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0);
+  const dsc = sub * (Number(o.desconto) || 0) / 100;
+  const tax = sub * (Number(o.taxas) || 0) / 100;
+  return { sub, dsc, tax, tot: sub - dsc + tax };
+};
+const orcNumero = lista => {
+  const ano = new Date().getFullYear();
+  const nums = lista.map(o => o.numero || '').filter(n => n.startsWith(`ORC-${ano}-`)).map(n => parseInt(n.split('-')[2], 10)).filter(n => !isNaN(n));
+  return `ORC-${ano}-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(4, '0')}`;
+};
+const orcItemRow = (it = {}) => `<tr>
+  <td><input data-of="descricao" value="${esc(it.descricao || '')}" placeholder="Descrição do item"></td>
+  <td><input data-of="qtd" type="number" step="any" min="0" value="${esc(it.qtd ?? 1)}"></td>
+  <td><select data-of="unidade">${UNIDADES.map(u => `<option value="${esc(u)}" ${u === (it.unidade || 'un') ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></td>
+  <td><input data-of="valor" type="number" step="any" min="0" value="${esc(it.valor ?? '')}"></td>
+  <td><a href="#" data-orc-rm="1">remover</a></td>
+</tr>`;
+
+async function orcamentos(q) {
+  const [os, obras, cls, ts] = await Promise.all([all('orcamentos'), all('obras'), all('clientes'), getTipos()]);
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const om = Object.fromEntries(obras.map(o => [o.id, o]));
+  const qp = new URLSearchParams(q || '');
+  const cur = os.find(x => x.id === qp.get('e')) || {};
+  const mostrarForm = qp.has('nova') || !!cur.id;
+  const itens0 = (cur.itens && cur.itens.length) ? cur.itens : [{ descricao: '', qtd: 1, unidade: 'un', valor: '' }];
+  const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || 'Cliente não informado'}`]);
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Orçamentos</h2><p>Propostas comerciais vinculadas a imóveis e tipos de serviço.</p></div>
+    <a class="btn" href="#/orcamentos?nova=1">+ Novo orçamento</a></section>
+  ${mostrarForm ? `<form id="orc-form" class="card">
+    <div class="grid">
+      ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', req: 1, opts: opObra }, cur.obraId || '')}
+      ${fieldHtml({ k: 'tipo', l: 'Tipo de serviço', req: 1, opts: ts.map(t => [t.nome, t.nome]) }, cur.tipo || '')}
+      ${fieldHtml({ k: 'status', l: 'Status', req: 1, opts: ORC_STATUS.map(s => [s, s]) }, cur.status || 'Rascunho')}
+      ${fieldHtml({ k: 'validade', l: 'Validade', type: 'date' }, cur.validade || '')}
+    </div>
+    <h3 style="margin-top:14px">Itens</h3>
+    <div style="overflow-x:auto"><table class="orc-itens"><thead><tr><th>Descrição</th><th>Qtd.</th><th>Un.</th><th>Valor unit.</th><th></th></tr></thead><tbody id="orc-itens">
+      ${itens0.map(it => orcItemRow(it)).join('')}
+    </tbody></table></div>
+    <div class="row"><button type="button" class="btn ghost" id="orc-add">+ Adicionar item</button></div>
+    <div class="grid" style="margin-top:12px">
+      ${fieldHtml({ k: 'desconto', l: 'Desconto (%)', type: 'number' }, cur.desconto ?? '')}
+      ${fieldHtml({ k: 'taxas', l: 'Taxas / ISS (%)', type: 'number' }, cur.taxas ?? '')}
+      ${fieldHtml({ k: 'condicoes', l: 'Condições de pagamento' }, cur.condicoes || '')}
+      ${fieldHtml({ k: 'observacoes', l: 'Observações', type: 'textarea' }, cur.observacoes || '')}
+    </div>
+    <div class="orc-totais">
+      <div><span>Subtotal</span><b id="orc-sub">—</b></div>
+      <div><span>Desconto</span><b id="orc-dsc">—</b></div>
+      <div><span>Taxas</span><b id="orc-tax">—</b></div>
+      <div class="total"><span>Total</span><b id="orc-tot">—</b></div>
+    </div>
+    <div class="row"><button class="btn">${cur.id ? 'Salvar orçamento' : 'Criar orçamento'}</button><a class="btn ghost" href="#/orcamentos">Cancelar</a></div>
+  </form>` : (!obras.length ? '<div class="warn">Cadastre um cliente e um imóvel/obra antes de criar um orçamento.</div>' : '')}
+  <div class="card">
+    <div class="list-filters">
+      <input id="o-busca" placeholder="Buscar número, imóvel, cliente ou serviço…">
+      <select id="o-status"><option value="">Todos os status</option>${ORC_STATUS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>
+    </div>
+    <table><thead><tr><th>Número</th><th>Imóvel/Cliente</th><th>Tipo</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody id="o-tbody">
+    ${os.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(o => { const obra = om[o.obraId]; const t = orcTotais(o); return `<tr data-status="${esc(o.status)}"><td><b>${esc(o.numero || '—')}</b><br><small>${esc(o.validade ? 'val. ' + o.validade : '')}</small></td><td>${esc(obra?.nome || '?')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(o.tipo)}</td><td>${brl(t.tot)}</td><td><span class="status-badge orc-${esc(String(o.status || '').toLowerCase())}">${esc(o.status)}</span></td>
+    <td class="act"><a href="#/orcamento/${o.id}">Ver proposta</a><a href="#/orcamentos?e=${o.id}">Editar</a><a href="#" data-del="orcamentos:${o.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhum orçamento cadastrado.</td></tr>'}
+    <tr id="o-vazio" hidden><td colspan="6">Nenhum registro corresponde aos filtros.</td></tr>
+    </tbody></table>
+  </div>`;
+  const lerItens = () => [...document.querySelectorAll('#orc-itens tr')].map(tr => ({
+    descricao: tr.querySelector('[data-of=descricao]').value.trim(),
+    qtd: tr.querySelector('[data-of=qtd]').value,
+    unidade: tr.querySelector('[data-of=unidade]').value,
+    valor: tr.querySelector('[data-of=valor]').value
+  })).filter(i => i.descricao || i.valor);
+  const recalcular = () => {
+    const t = orcTotais({ itens: lerItens(), desconto: $('#orc-form [name=desconto]')?.value, taxas: $('#orc-form [name=taxas]')?.value });
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = brl(v); };
+    set('orc-sub', t.sub); set('orc-dsc', t.dsc); set('orc-tax', t.tax); set('orc-tot', t.tot);
+  };
+  const form = $('#orc-form');
+  if (form) {
+    $('#orc-add').onclick = () => { $('#orc-itens').insertAdjacentHTML('beforeend', orcItemRow()); recalcular(); };
+    $('#orc-itens').addEventListener('click', e => { const a = e.target.closest('[data-orc-rm]'); if (!a) return; e.preventDefault(); const tr = a.closest('tr'); if ($('#orc-itens').children.length > 1) tr.remove(); else tr.querySelectorAll('input').forEach(i => i.value = ''); recalcular(); });
+    form.addEventListener('input', recalcular);
+    recalcular();
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(form));
+      const itens = lerItens();
+      if (!itens.length) return alert('Adicione ao menos um item.');
+      const obra = om[d.obraId];
+      const o = { ...cur, ...d, itens, clienteId: obra?.clienteId || cur.clienteId || '', numero: cur.numero || orcNumero(os), id: cur.id || uid(), criado: cur.criado || new Date().toISOString(), atualizado: new Date().toISOString() };
+      await put('orcamentos', o);
+      location.hash = '#/orcamentos'; render();
+    };
+  }
+  const filtrar = () => {
+    const texto = ($('#o-busca')?.value || '').toLowerCase().trim();
+    const st = $('#o-status')?.value || '';
+    const rows = [...document.querySelectorAll('#o-tbody tr[data-status]')];
+    rows.forEach(r => { let ok = true; if (texto && !r.textContent.toLowerCase().includes(texto)) ok = false; if (st && r.dataset.status !== st) ok = false; r.hidden = !ok; });
+    const vis = rows.filter(r => !r.hidden).length;
+    const vazio = $('#o-vazio'); if (vazio) vazio.hidden = !(rows.length > 0 && vis === 0);
+  };
+  const b = $('#o-busca'); if (b) b.oninput = filtrar;
+  const s = $('#o-status'); if (s) s.onchange = filtrar;
+}
+
+async function orcamento(id) {
+  const o = await get('orcamentos', id);
+  if (!o) { app.innerHTML = '<div class="warn">Orçamento não encontrado.</div>'; return; }
+  const obra = o.obraId ? await get('obras', o.obraId) : null;
+  const cliente = obra ? await get('clientes', obra.clienteId) : null;
+  const t = orcTotais(o);
+  const statusAcoes = [['Enviado', 'Marcar como enviado'], ['Aprovado', 'Aprovar'], ['Recusado', 'Recusar']].filter(([s]) => s !== o.status).map(([s, l]) => `<a class="btn ghost" href="#" data-orc-status="${s}" data-orc-status-id="${o.id}">${l}</a>`).join('');
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
+  ${o.status === 'Aprovado' ? '<div class="ok">Orçamento aprovado. Agende a visita para iniciar a vistoria.</div>' : ''}
+  <div class="card laudo proposta">
+    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <div class="proposta-head"><div><h1>Proposta Comercial</h1><p>${esc(o.numero || '')} · ${esc(o.status || '')}</p></div><div class="proposta-val"><small>Validade</small><b>${o.validade ? esc(dataBR(o.validade)) : '—'}</b></div></div>
+    <p><b>Cliente:</b> ${esc(cliente?.nome || '—')} ${esc(cliente?.documento || '')}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome || '—')} — ${esc(obra?.endereco || '')} ${esc(obra?.cidade || '')}${obra?.uf ? '/' + esc(obra.uf) : ''}<br><b>Serviço:</b> ${esc(o.tipo || '—')}</p>
+    <table class="orc-proposta"><thead><tr><th>Descrição</th><th>Qtd.</th><th>Un.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>
+      ${(o.itens || []).map(i => `<tr><td>${esc(i.descricao)}</td><td>${esc(i.qtd)}</td><td>${esc(i.unidade)}</td><td>${brl(i.valor)}</td><td>${brl((Number(i.qtd) || 0) * (Number(i.valor) || 0))}</td></tr>`).join('') || '<tr><td colspan="5">Sem itens.</td></tr>'}
+    </tbody></table>
+    <div class="orc-totais">
+      <div><span>Subtotal</span><b>${brl(t.sub)}</b></div>
+      <div><span>Desconto (${esc(o.desconto || 0)}%)</span><b>${brl(t.dsc)}</b></div>
+      <div><span>Taxas (${esc(o.taxas || 0)}%)</span><b>${brl(t.tax)}</b></div>
+      <div class="total"><span>Total</span><b>${brl(t.tot)}</b></div>
+    </div>
+    ${o.condicoes ? `<p><b>Condições de pagamento:</b> ${esc(o.condicoes)}</p>` : ''}
+    ${o.observacoes ? `<p><b>Observações:</b> ${esc(o.observacoes)}</p>` : ''}
+  </div>`;
 }
 
 const hf = (v, k, l, type = 'text') => `<div><label>${l}</label><input type="${type}" ${type === 'number' ? 'step="any" min="0"' : ''} data-h="${k}" value="${esc(v[k])}"></div>`;
@@ -480,10 +790,10 @@ async function vistoria(id) {
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
-  <p>${esc(cli?.nome)} · ${esc(v.tipo)} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
+  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
   ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}. <a href="#" data-reopen="1">Reabrir (apaga a assinatura)</a></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
-    <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'vistoriador', 'Engenheiro / Vistoriador')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}</div>
+    <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
     <div class="card">${itens || 'Checklist vazio. Edite em Checklist.'}</div>
     ${locked ? '' : `<div class="card"><h3>Finalizar e assinar</h3>
       <label>Nome do responsável</label><input id="signNome" value="${esc(v.vistoriador)}">
@@ -507,7 +817,8 @@ async function laudo(id) {
     <h1>Laudo de Vistoria — ${esc(v.tipo)}</h1>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br>
-    <b>Data:</b> ${esc(v.data)}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    <b>Data:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    ${v.orientacoes ? `<p><b>Orientações:</b> ${esc(v.orientacoes)}</p>` : ''}
     <p><b>Resumo:</b> ${v.itens.length} itens analisados, ${nc.length} não conforme(s).</p>
     ${v.itens.map(it => {
       const hd = it.cat !== last ? `<h3>${esc(it.cat)}</h3>` : ''; last = it.cat;
@@ -554,6 +865,155 @@ async function backup() {
     for (const s of STORES) { for (const x of await all(s)) await del(s, x.id); for (const x of d[s] || []) await put(s, x, nuvem); }
     alert('Restaurado.'); location.hash = '#/'; render();
   };
+}
+
+/* ---------- LGPD e privacidade ---------- */
+async function lgpd() {
+  const [cls, os, vs, ag, orcs] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos'), all('orcamentos')]);
+  const com = cls.filter(c => c.consentimento).length;
+  const sem = cls.length - com;
+  const exportar = async id => {
+    const c = cls.find(x => x.id === id); if (!c) return;
+    const minhasObras = os.filter(o => o.clienteId === id);
+    const ids = new Set(minhasObras.map(o => o.id));
+    const minhasVs = vs.filter(v => ids.has(v.obraId));
+    const vIds = new Set(minhasVs.map(v => v.id));
+    const todasFotos = await all('fotos');
+    const dados = {
+      exportadoEm: new Date().toISOString(), sistema: 'VISTORI-ENGENHARIA', versao: VERSION,
+      cliente: c, imoveis: minhasObras, vistorias: minhasVs,
+      agendamentos: ag.filter(a => ids.has(a.obraId)),
+      orcamentos: orcs.filter(o => ids.has(o.obraId)),
+      fotos: todasFotos.filter(f => vIds.has(f.vistoriaId))
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }));
+    a.download = `dados-cliente-${id}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+  const anonimizar = async id => {
+    const c = cls.find(x => x.id === id); if (!c) return;
+    if (!confirm(`Anonimizar os dados pessoais de "${c.nome}"?\n\nOs dados de contato e documento serão apagados e o cadastro ficará identificado como "Anonimizado". Esta ação não pode ser desfeita.`)) return;
+    await put('clientes', { ...c, nome: 'Anonimizado #' + id.slice(-6), pessoa: '', fantasia: '', documento: '', telefone: '', email: '', endereco: '', cidade: '', uf: '', observacoes: '', anonimizado: new Date().toISOString() });
+    render();
+  };
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>LGPD e privacidade</h2><p>Consentimentos, exportação e anonimização dos dados pessoais.</p></div></section>
+  <div class="lgpd-kpis">
+    <div class="kpi-card"><span>Clientes cadastrados</span><strong>${cls.length}</strong><small>Base de dados pessoais</small></div>
+    <div class="kpi-card success"><span>Com consentimento</span><strong>${com}</strong><small>Registro de consentimento</small></div>
+    <div class="kpi-card ${sem ? 'danger' : 'success'}"><span>Sem consentimento</span><strong>${sem}</strong><small>${sem ? 'Pendente de registro' : 'Todos registrados'}</small></div>
+  </div>
+  <div class="warn"><b>Governança de dados:</b> estes recursos apoiam a conformidade com a LGPD, mas não substituem avaliação jurídica nem certificam conformidade legal. Laudos assinados são mantidos pelo prazo de retenção; a anonimização remove os dados pessoais do cadastro do cliente.</div>
+  <div class="card">
+    <div class="section-heading"><div><h3>Consentimentos e direitos do titular</h3><p>Registre o consentimento, exporte os dados ou anonimize o cadastro.</p></div></div>
+    <table><thead><tr><th>Cliente</th><th>Documento</th><th>Consentimento</th><th></th></tr></thead><tbody id="lgpd-tbody">
+    ${cls.map(c => `<tr><td>${esc(c.nome)}<br><small>${esc(c.pessoa)}</small></td><td>${esc(c.documento || '—')}</td><td>${c.consentimento ? `<span class="status-badge signed">${new Date(c.consentimento).toLocaleDateString('pt-BR')}</span>` : '<span class="status-badge draft">Pendente</span>'}${c.anonimizado ? '<br><small>Anonimizado</small>' : ''}</td>
+    <td class="act">${!c.consentimento ? `<a href="#" data-lgpd="consentir" data-id="${c.id}">Registrar</a>` : ''}<a href="#" data-lgpd="exportar" data-id="${c.id}">Exportar dados</a><a href="#" data-lgpd="anonimizar" data-id="${c.id}">Anonimizar</a></td></tr>`).join('') || '<tr><td colspan="4">Nenhum cliente cadastrado.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  const tb = $('#lgpd-tbody');
+  if (tb) tb.addEventListener('click', async e => {
+    const a = e.target.closest('[data-lgpd]'); if (!a) return; e.preventDefault();
+    const id = a.dataset.id;
+    if (a.dataset.lgpd === 'exportar') await exportar(id);
+    else if (a.dataset.lgpd === 'anonimizar') await anonimizar(id);
+    else if (a.dataset.lgpd === 'consentir') { const c = cls.find(x => x.id === id); if (c) { await put('clientes', { ...c, consentimento: new Date().toISOString() }); render(); } }
+  });
+}
+
+/* ---------- financeiro ---------- */
+const recStatus = r => r.status === 'Recebido' ? 'Recebido' : (r.vencimento && r.vencimento < new Date().toISOString().slice(0, 10) ? 'Atrasado' : 'Pendente');
+
+async function financeiro(q) {
+  const [recs, cls, obras] = await Promise.all([all('recebimentos'), all('clientes'), all('obras')]);
+  const om = Object.fromEntries(obras.map(o => [o.id, o]));
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const qp = new URLSearchParams(q || '');
+  const mostrarForm = qp.has('nova');
+  const soma = arr => arr.reduce((n, r) => n + (Number(r.valor) || 0), 0);
+  const prev = soma(recs);
+  const receb = soma(recs.filter(r => r.status === 'Recebido'));
+  const aberto = soma(recs.filter(r => r.status !== 'Recebido'));
+  const atras = soma(recs.filter(r => recStatus(r) === 'Atrasado'));
+  const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || ''}`]);
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Financeiro</h2><p>Receitas previstas, recebidas e contas a receber.</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/financeiro?nova=1">+ Novo recebimento</a><button type="button" class="btn ghost" id="fin-gerar">Gerar de orçamentos/vistorias</button></div></section>
+  ${mostrarForm ? `<form id="fin-form" class="card grid">
+    ${fieldHtml({ k: 'descricao', l: 'Descrição', req: 1 }, '')}
+    ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', opts: opObra }, '')}
+    ${fieldHtml({ k: 'valor', l: 'Valor (R$)', req: 1, type: 'number' }, '')}
+    ${fieldHtml({ k: 'vencimento', l: 'Vencimento', type: 'date' }, '')}
+    <div class="row"><button class="btn">Adicionar recebimento</button><a class="btn ghost" href="#/financeiro">Cancelar</a></div>
+  </form>` : ''}
+  <div class="kpi-grid">
+    <div class="kpi-card"><span>Previsto</span><strong>${brl(prev)}</strong><small>Todos os recebimentos</small></div>
+    <div class="kpi-card success"><span>Recebido</span><strong>${brl(receb)}</strong><small>${recs.filter(r => r.status === 'Recebido').length} lançamento(s)</small></div>
+    <div class="kpi-card"><span>Em aberto</span><strong>${brl(aberto)}</strong><small>${recs.filter(r => r.status !== 'Recebido').length} lançamento(s)</small></div>
+    <div class="kpi-card danger"><span>Atrasado</span><strong>${brl(atras)}</strong><small>Vencidos e não recebidos</small></div>
+  </div>
+  <div class="card">
+    <div class="list-filters">
+      <input id="f-busca" placeholder="Buscar descrição, cliente ou imóvel…">
+      <select id="f-status"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Recebido">Recebido</option><option value="Atrasado">Atrasado</option></select>
+      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option></select>
+    </div>
+    <table><thead><tr><th>Descrição</th><th>Cliente/Imóvel</th><th>Origem</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="f-tbody">
+    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
+    <tr id="f-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
+    </tbody></table>
+  </div>`;
+  const form = $('#fin-form');
+  if (form) form.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(form));
+    await put('recebimentos', { id: uid(), origem: 'manual', origemId: '', descricao: d.descricao, obraId: d.obraId || '', clienteId: om[d.obraId]?.clienteId || '', valor: d.valor, vencimento: d.vencimento || '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+    location.hash = '#/financeiro'; render();
+  };
+
+  const g = $('#fin-gerar');
+  if (g) g.onclick = async () => {
+    const [orcs, vs, atuais] = await Promise.all([all('orcamentos'), all('vistorias'), all('recebimentos')]);
+    const exist = new Set(atuais.map(r => r.origem + ':' + r.origemId));
+    let n = 0;
+    for (const o of orcs.filter(o => o.status === 'Aprovado')) {
+      if (exist.has('orcamento:' + o.id)) continue;
+      const t = orcTotais(o);
+      await put('recebimentos', { id: uid(), origem: 'orcamento', origemId: o.id, descricao: ('Proposta ' + (o.numero || '')).trim(), obraId: o.obraId || '', clienteId: o.clienteId || '', valor: t.tot, vencimento: '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+      exist.add('orcamento:' + o.id); n++;
+    }
+    for (const v of vs.filter(v => Number(v.valor) > 0)) {
+      if (exist.has('vistoria:' + v.id)) continue;
+      await put('recebimentos', { id: uid(), origem: 'vistoria', origemId: v.id, descricao: ('Vistoria ' + (v.tipo || '')).trim(), obraId: v.obraId || '', clienteId: om[v.obraId]?.clienteId || '', valor: Number(v.valor), vencimento: v.data || '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+      exist.add('vistoria:' + v.id); n++;
+    }
+    alert(n ? `${n} recebimento(s) gerado(s).` : 'Nada novo para gerar.');
+    render();
+  };
+
+  const filtrar = () => {
+    const texto = ($('#f-busca')?.value || '').toLowerCase().trim();
+    const st = $('#f-status')?.value || '';
+    const per = $('#f-periodo')?.value || '';
+    const hoje = new Date(); const mes = hoje.toISOString().slice(0, 7); const ano = hoje.getFullYear();
+    const rows = [...document.querySelectorAll('#f-tbody tr[data-status]')];
+    rows.forEach(r => {
+      let ok = true;
+      if (texto && !r.textContent.toLowerCase().includes(texto)) ok = false;
+      if (st && r.dataset.status !== st) ok = false;
+      if (per) {
+        const v = r.dataset.venc || '';
+        if (!v) ok = false;
+        else if (per === 'mes' && v.slice(0, 7) !== mes) ok = false;
+        else if (per === 'ano' && Number(v.slice(0, 4)) !== ano) ok = false;
+      }
+      r.hidden = !ok;
+    });
+    const vis = rows.filter(r => !r.hidden).length;
+    const vazio = $('#f-vazio'); if (vazio) vazio.hidden = !(rows.length > 0 && vis === 0);
+  };
+  const b = $('#f-busca'); if (b) b.oninput = filtrar;
+  const s = $('#f-status'); if (s) s.onchange = filtrar;
+  const p = $('#f-periodo'); if (p) p.onchange = filtrar;
 }
 
 /* ---------- eventos globais ---------- */
@@ -615,6 +1075,29 @@ document.addEventListener('click', async e => {
     if (f.id) await del('fotos', f.id);
     curV.itens[i].fotos.splice(j, 1); await put('vistorias', curV);
     const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+  } else if (d.agendaIniciar) {
+    e.preventDefault();
+    const agendamento = await get('agendamentos', d.agendaIniciar);
+    if (!agendamento) return alert('Agendamento não encontrado.');
+    if (agendamento.vistoriaId) { location.hash = `#/vistoria/${agendamento.vistoriaId}`; return; }
+    try {
+      const v = await novaVistoriaDaAgenda(agendamento);
+      location.hash = `#/vistoria/${v.id}`;
+    } catch (err) { alert(err.message); }
+  } else if (d.orcStatus) {
+    e.preventDefault();
+    const o = await get('orcamentos', d.orcStatusId);
+    if (!o) return;
+    await put('orcamentos', { ...o, status: d.orcStatus, atualizado: new Date().toISOString() });
+    render();
+  } else if (d.receber) {
+    e.preventDefault();
+    const r = await get('recebimentos', d.receber);
+    if (r) { await put('recebimentos', { ...r, status: 'Recebido', pagoEm: new Date().toISOString() }); render(); }
+  } else if (d.reabrir) {
+    e.preventDefault();
+    const r = await get('recebimentos', d.reabrir);
+    if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); render(); }
   } else if (d.reopen) {
     e.preventDefault();
     delete curV.assinatura; curV.status = 'rascunho'; await put('vistorias', curV); vistoria(curV.id);
@@ -805,12 +1288,12 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);

@@ -56,6 +56,12 @@
   .dashboard-heading{flex-direction:column}
   .dashboard-actions{width:100%;justify-content:flex-start}
   .dashboard-actions .btn{flex:1 1 auto}
+  .agenda-title{align-items:flex-start}
+  .agenda-title .btn{width:100%}
+  .agenda-filters{grid-template-columns:1fr}
+  .client-head{align-items:flex-start}
+  .client-head .btn{width:100%}
+  .lgpd-kpis{grid-template-columns:1fr}
 }
 
 @media screen and (max-width:460px){
