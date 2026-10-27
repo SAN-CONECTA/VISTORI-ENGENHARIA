@@ -11,6 +11,7 @@
   body.nav-open{overflow:hidden}
   body.nav-open .nav-backdrop{display:block;position:fixed;inset:0;z-index:19;border:0;background:rgba(16,32,33,.48)}
   .nav-toggle{display:block}
+  .sidebar-toggle{display:none}
   .topbar{padding:0 16px}
   main{padding:24px 20px}
   .login-layout{grid-template-columns:1fr}
@@ -59,6 +60,7 @@
 
 @media screen and (max-width:460px){
   .topbar h1{font-size:1rem}
+  .userbox .tag{display:none}
   .nav-toggle{width:42px;height:42px}
   main{padding:14px 10px}
   h2{font-size:1.25rem}
