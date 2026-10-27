@@ -1,12 +1,12 @@
 'use strict';
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
 const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 6);
+  const r = indexedDB.open('vistori', 7);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -1016,6 +1016,39 @@ async function financeiro(q) {
   const p = $('#f-periodo'); if (p) p.onchange = filtrar;
 }
 
+/* ---------- usuários e acessos ---------- */
+async function usuarios() {
+  let lista = []; let erro = '';
+  try { lista = await all('acessos'); }
+  catch (e) { erro = (e && e.code === 'permission-denied') ? 'Sem permissão para ler a lista de acessos.' : ((e && e.message) || 'Falha ao carregar a lista.'); }
+  const nuvem = MODO !== 'local';
+  const emailAtual = (USER?.email || '').toLowerCase();
+  lista.sort((a, b) => (a.nome || a.id || '').localeCompare(b.nome || b.id || '', 'pt-BR'));
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Usuários e acessos</h2><p>Quem pode entrar no sistema e acessar os dados.</p></div></section>
+  ${nuvem ? `<div class="warn"><b>Ambiente em nuvem:</b> a lista abaixo controla o acesso ao Firestore. As regras de segurança precisam estar publicadas no Firebase Console (Firestore → Regras → Publicar). Conectado como <b>${esc(emailAtual || '—')}</b>.</div>` : '<div class="warn"><b>Modo local (teste):</b> a lista abaixo fica só neste aparelho. No ambiente em nuvem ela controla o acesso real.</div>'}
+  ${erro ? `<div class="warn">${esc(erro)}</div>` : ''}
+  <form id="user-form" class="card grid">
+    ${fieldHtml({ k: 'email', l: 'E-mail autorizado', req: 1, type: 'email' }, '')}
+    ${fieldHtml({ k: 'nome', l: 'Nome' }, '')}
+    ${fieldHtml({ k: 'perfil', l: 'Perfil', opts: [['Administrador', 'Administrador'], ['Engenheiro', 'Engenheiro'], ['Vistoriador', 'Vistoriador'], ['Financeiro', 'Financeiro']] }, 'Administrador')}
+    <div class="row"><button class="btn">Autorizar e-mail</button></div>
+  </form>
+  <div class="card">
+    <table><thead><tr><th>E-mail</th><th>Nome</th><th>Perfil</th><th></th></tr></thead><tbody>
+    ${lista.map(u => `<tr><td>${esc(u.id)}</td><td>${esc(u.nome || '—')}</td><td>${esc(u.perfil || '—')}</td><td class="act">${u.id === emailAtual ? '<span class="status-badge signed">Você</span>' : ''}<a href="#" data-del="acessos:${esc(u.id)}">Remover</a></td></tr>`).join('') || '<tr><td colspan="4">Nenhum e-mail cadastrado. Os e-mails de bootstrap das regras sempre entram.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  const f = $('#user-form');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(f));
+    const email = String(d.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert('Informe um e-mail válido.');
+    await put('acessos', { id: email, nome: (d.nome || '').trim(), perfil: d.perfil || 'Administrador', criado: new Date().toISOString() });
+    render();
+  };
+}
+
 /* ---------- eventos globais ---------- */
 app.addEventListener('change', async e => {
   const t = e.target;
@@ -1055,6 +1088,7 @@ document.addEventListener('click', async e => {
     const [s, id] = d.del.split(':');
     if (s === 'clientes' && (await all('obras')).some(o => o.clienteId === id)) return alert('Este cliente tem imóveis/obras vinculados.');
     if (s === 'obras' && (await all('vistorias')).some(v => v.obraId === id)) return alert('Este imóvel/obra tem vistorias vinculadas.');
+    if (s === 'acessos' && id === (USER?.email || '').toLowerCase()) return alert('Você não pode remover o seu próprio acesso.');
     if (s === 'tipos') {
       const t = await get('tipos', id);
       if ((await all('vistorias')).some(v => v.tipo === t?.nome)) return alert('Este tipo de serviço já foi usado em vistorias.');
@@ -1290,15 +1324,15 @@ async function render() {
   const [r, arg] = path.split('/');
   const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, usuarios, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
     app.innerHTML = err.code === 'permission-denied'
-      ? '<div class="warn"><b>Sem permissão.</b> Este e-mail não está autorizado nas regras do Firestore. Peça ao administrador para incluí-lo em <code>firestore.rules</code>.</div>'
+      ? '<div class="warn"><b>Sem permissão.</b> Este e-mail não está autorizado a acessar os dados. Peça a um administrador para autorizá-lo em <b>Usuários e acessos</b> (a lista depende das regras do Firestore publicadas no Firebase Console).</div>'
       : `<div class="warn">Erro: ${esc(err.message)}</div>`;
   }
 }
