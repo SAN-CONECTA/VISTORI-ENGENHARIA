@@ -1,20 +1,31 @@
 rules_version = '2';
 
 // Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar.
-// ANTES de publicar, troque os e-mails abaixo pelos e-mails dos usuários criados em Authentication.
+// Bootstrap: os e-mails fixos abaixo sempre entram e podem autorizar outros na tela "Usuários e acessos".
+// Os demais e-mails precisam existir em /acessos/{email}.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function autorizado() {
-      return request.auth != null
-        && request.auth.token.email != null
-        && request.auth.token.email.lower() in [
-          'TROQUE-PELO-SEU-EMAIL@exemplo.com',
-          'outro-vistoriador@exemplo.com'
-        ];
+    function emailAtual() {
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower() : '';
     }
 
-    // Tudo exige usuário autorizado. Qualquer outro acesso é negado.
+    function bootstrap() {
+      return emailAtual() in ['sandro@santecnologia.com', 'sandro@sanconecta.com'];
+    }
+
+    function autorizado() {
+      return request.auth != null && emailAtual() != '' &&
+        (bootstrap() || exists(/databases/$(database)/documents/acessos/$(emailAtual())));
+    }
+
+    // Lista de e-mails autorizados (gerida na tela "Usuários e acessos").
+    match /acessos/{doc} {
+      allow read, write: if autorizado();
+    }
+
+    // Todo o resto exige usuário autorizado.
     match /{document=**} {
       allow read, write: if autorizado();
     }
