@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.4.2';
+const VERSION = '0.4.3';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -231,7 +231,7 @@ async function clientes(q) {
     { k: 'uf', l: 'UF', opts: UFS.map(u => [u, u]) },
     { k: 'observacoes', l: 'Observações', type: 'textarea' }
   ], [
-    { l: 'Cliente', fn: i => `${esc(i.nome)}<br><small>${esc(i.pessoa)} ${esc(i.documento)}</small>` },
+    { l: 'Cliente', fn: i => `<a href="#/cliente/${i.id}">${esc(i.nome)}</a><br><small>${esc(i.pessoa)} ${esc(i.documento)}</small>` },
     { l: 'Contato', fn: i => `${esc(i.telefone)}<br><small>${esc(i.email)}</small>` },
     { l: 'Imóveis', fn: i => n(i.id) }
   ], q, {
@@ -245,6 +245,43 @@ async function clientes(q) {
       <a class="btn ghost" href="#/obras?clienteId=${cur.id}">+ Novo imóvel/obra para este cliente</a></div>`;
     }
   });
+}
+
+/* ---------- 1.1.1 Ficha do cliente ---------- */
+async function cliente(id) {
+  const [c, os, vs] = await Promise.all([get('clientes', id), all('obras'), all('vistorias')]);
+  if (!c) { app.innerHTML = '<div class="warn">Cliente não encontrado.</div>'; return; }
+  const obras = os.filter(o => o.clienteId === id);
+  const vist = vs.filter(v => obras.some(o => o.id === v.obraId)).sort((a, b) => (b.criado || '').localeCompare(a.criado || ''));
+  const doc = [c.documento, c.pessoa].filter(Boolean).join(' · ');
+  const cidade = [c.cidade, c.uf].filter(Boolean).join('/');
+  const desde = c.criado ? new Date(c.criado).toLocaleDateString('pt-BR') : '—';
+  app.innerHTML = `<p class="noprint"><a href="#/clientes">← Clientes</a></p>
+  <section class="section-heading client-head"><div><h2>${esc(c.nome)}</h2><p>${esc(doc)}${cidade ? ' · ' + esc(cidade) : ''}</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/obras?clienteId=${encodeURIComponent(c.id)}">+ Novo imóvel/obra</a><a class="btn ghost" href="#/clientes?e=${encodeURIComponent(c.id)}">Editar</a></div></section>
+  <div class="grid">
+    <div class="card"><h3>Contato</h3>
+      ${c.fantasia ? `<p><b>Contato / responsável:</b> ${esc(c.fantasia)}</p>` : ''}
+      ${c.telefone ? `<p><b>Telefone:</b> ${esc(c.telefone)}</p>` : ''}
+      ${c.email ? `<p><b>E-mail:</b> ${esc(c.email)}</p>` : ''}
+      ${c.endereco ? `<p><b>Endereço:</b> ${esc(c.endereco)}</p>` : ''}
+      <p><b>Cliente desde:</b> ${esc(desde)}</p>
+      ${c.observacoes ? `<p><b>Observações:</b> ${esc(c.observacoes)}</p>` : ''}
+    </div>
+    <div class="card"><h3>Consentimento LGPD</h3>
+      ${c.consentimento ? `<p class="ok">Registrado em ${new Date(c.consentimento).toLocaleString('pt-BR')}</p>` : `<p class="warn">Sem registro de consentimento.</p><button class="btn" id="consentir">Registrar consentimento</button>`}
+    </div>
+  </div>
+  <div class="card"><h3>Imóveis / obras</h3>
+    ${obras.map(o => { const n = vist.filter(v => v.obraId === o.id).length; return `<div>${esc(o.nome)} <small>${esc(o.tipo)}${o.cidade ? ' · ' + esc(o.cidade) : ''} · ${n} vistoria(s)</small> · <a href="#/obras?e=${o.id}">abrir</a></div>`; }).join('') || '<p>Nenhum imóvel/obra vinculado.</p>'}
+  </div>
+  <div class="card"><h3>Histórico de vistorias</h3>
+    <table><thead><tr><th>Data</th><th>Imóvel/Obra</th><th>Tipo</th><th>Status</th><th></th></tr></thead><tbody>
+    ${vist.map(v => { const o = obras.find(x => x.id === v.obraId); return `<tr><td>${esc(v.data)}${v.hora ? ' ' + esc(v.hora) : ''}</td><td>${esc(o?.nome || '?')}</td><td>${esc(v.tipo)}</td><td>${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</td><td class="act"><a href="#/vistoria/${v.id}">Abrir</a><a href="#/laudo/${v.id}">Laudo</a></td></tr>`; }).join('') || '<tr><td colspan="5">Nenhuma vistoria.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  const btn = $('#consentir');
+  if (btn) btn.onclick = async () => { await put('clientes', { ...c, consentimento: new Date().toISOString() }); cliente(c.id); };
 }
 
 async function obras(q) {
@@ -890,12 +927,12 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);

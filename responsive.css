@@ -59,6 +59,8 @@
   .agenda-title{align-items:flex-start}
   .agenda-title .btn{width:100%}
   .agenda-filters{grid-template-columns:1fr}
+  .client-head{align-items:flex-start}
+  .client-head .btn{width:100%}
 }
 
 @media screen and (max-width:460px){

@@ -1,5 +1,5 @@
-const CACHE = 'vistori-0.4.2';
-const SHELL = ['./', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.4.2', 'firebase-config.js', 'manifest.webmanifest', 'logo.png', 'logo-emblema.png', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'vistori-0.4.3';
+const SHELL = ['./', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.4.3', 'firebase-config.js', 'manifest.webmanifest', 'logo.png', 'logo-emblema.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
