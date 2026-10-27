@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.4.4';
+const VERSION = '0.4.5';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -418,6 +418,7 @@ async function migrarLocal(prog) {
 async function inicio() {
   const [c, o, v, ag] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos')]);
   const om = Object.fromEntries(o.map(x => [x.id, x]));
+  const cm = Object.fromEntries(c.map(x => [x.id, x.nome]));
   const agora = new Date();
   const saudacao = agora.getHours() < 12 ? 'Bom dia' : agora.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
   const dataExtenso = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
@@ -428,6 +429,18 @@ async function inicio() {
   const recentes = [...v].sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).slice(0, 5);
   const hoje = agora.toISOString().slice(0, 10);
   const visitasHoje = ag.filter(x => x.data === hoje && x.status !== 'Cancelada');
+  const proximos = ag.filter(x => x.data && x.data >= hoje && x.status !== 'Cancelada' && x.status !== 'Concluída').sort((a, b) => `${a.data} ${a.hora || ''}`.localeCompare(`${b.data} ${b.hora || ''}`)).slice(0, 5);
+  const atividades = [];
+  for (const x of v) { atividades.push({ ts: x.criado, tipo: 'vistoria', v: x }); if (x.assinatura?.ts) atividades.push({ ts: x.assinatura.ts, tipo: 'laudo', v: x }); }
+  for (const x of ag) atividades.push({ ts: x.criado, tipo: 'agenda', a: x });
+  const ultimas = atividades.filter(e => e.ts).sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 6);
+  const statusClass = s => 'agenda-' + String(s || '').toLowerCase().replace(/\s+/g, '-');
+  const evt = e => {
+    if (e.tipo === 'agenda') { const o = om[e.a.obraId]; return { icon: 'AG', txt: 'Visita agendada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${dataBR(e.a.data)} ${e.a.hora || ''}`.trim(), href: `#/agenda?e=${e.a.id}` }; }
+    const o = om[e.v.obraId];
+    if (e.tipo === 'laudo') return { icon: 'AS', txt: 'Laudo assinado', sub: `${o?.nome || 'Imóvel não encontrado'} · ${e.v.tipo}`, href: `#/laudo/${e.v.id}` };
+    return { icon: 'VI', txt: 'Vistoria criada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${e.v.tipo}`, href: `#/vistoria/${e.v.id}` };
+  };
   const aviso = MODO === 'local'
     ? '<div class="warn"><b>Modo local (teste):</b> os dados ficam somente neste aparelho/navegador.</div>'
     : '<div class="ok">Dados na nuvem (Firebase). Funciona offline: o que você salvar sem internet sobe sozinho quando a conexão voltar.</div>';
@@ -455,6 +468,16 @@ async function inicio() {
       <a href="#/obras"><span>Imóveis e obras</span><b>${o.length}</b></a>
       <a href="#/cadastros"><span>Gerenciar cadastros auxiliares</span><b>→</b></a>
       <a href="#/backup"><span>Exportar cópia de segurança</span><b>→</b></a>
+    </aside>
+  </section>
+  <section class="dashboard-grid">
+    <div class="card dashboard-upcoming">
+      <div class="section-heading"><div><h3>Próximos compromissos</h3><p>Visitas agendadas a partir de hoje.</p></div><a href="#/agenda">Ver agenda →</a></div>
+      ${proximos.length ? `<div class="agenda-mini">${proximos.map(x => { const obra = om[x.obraId]; return `<a class="agenda-mini-item" href="#/agenda?e=${encodeURIComponent(x.id)}"><span class="agenda-mini-when"><b>${dataBR(x.data)}</b><small>${esc(x.hora || '—')}</small></span><span class="agenda-mini-info"><b>${esc(obra?.nome || 'Imóvel não encontrado')}</b><small>${esc(cm[obra?.clienteId] || '')} · ${esc(x.tipo)}</small></span><span class="status-badge ${statusClass(x.status)}">${esc(x.status)}</span></a>`; }).join('')}</div>` : '<p>Nenhuma visita agendada para os próximos dias.</p>'}
+    </div>
+    <aside class="card dashboard-activity">
+      <div class="section-heading"><div><h3>Atividades recentes</h3><p>Últimos movimentos no sistema.</p></div></div>
+      ${ultimas.length ? `<ol class="timeline">${ultimas.map(e => { const d = evt(e); return `<li><span class="tl-code">${d.icon}</span><div><a href="${d.href}">${esc(d.txt)}</a><small>${esc(d.sub)}</small><em>${fmt(e.ts)}</em></div></li>`; }).join('')}</ol>` : '<p>Nenhuma atividade registrada ainda.</p>'}
     </aside>
   </section>`;
 }
