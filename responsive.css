@@ -66,6 +66,8 @@
   .client-head{align-items:flex-start}
   .client-head .btn{width:100%}
   .lgpd-kpis{grid-template-columns:1fr}
+  .audit-item{grid-template-columns:1fr;gap:2px;padding:10px 0}
+  .audit-who{text-align:left}
   .cmdk{padding:8vh 10px 10px}
 }
 

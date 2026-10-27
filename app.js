@@ -1,13 +1,13 @@
 'use strict';
-const VERSION = '0.14.0';
+const VERSION = '0.15.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'lixeira', 'auditoria', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'lixeira', 'auditoria', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -17,6 +17,19 @@ const PRAZOS = ['Imediato', '15 dias', '30 dias', '60 dias', '90 dias'];
 const DOC_TIPOS = ['ART', 'Planta', 'Contrato', 'Proposta', 'Foto', 'Outro'];
 const lerArquivo = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
 const fmtBytes = n => !n ? '—' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+const STORE_LABEL = { clientes: 'Cliente', obras: 'Imóvel/Obra', vistorias: 'Vistoria', versoes: 'Versão', anomalias: 'Anomalia', documentos: 'Documento', agendamentos: 'Agendamento', orcamentos: 'Orçamento', recebimentos: 'Recebimento', acessos: 'Acesso', tipos: 'Tipo de serviço', fornecedores: 'Fornecedor', catalogo: 'Catálogo', precos: 'Preço', fotos: 'Foto', config: 'Configuração' };
+const labelReg = d => (d && (d.nome || d.numero || d.numeroLaudo || d.titulo || d.descricao || d.razao || d.id)) || '—';
+async function auditar(acao, entidade, refId, detalhe) {
+  try { await put('auditoria', { id: uid(), em: new Date().toISOString(), por: USER?.email || 'local', acao, entidade, refId: refId || '', detalhe: detalhe || '' }); } catch (e) {}
+}
+async function excluirLixeira(tid) {
+  const it = await get('lixeira', tid);
+  if (!it) return;
+  for (const fid of (it.extras && it.extras.fotos) || []) await del('fotos', fid);
+  for (const pid of (it.extras && it.extras.precos) || []) await del('precos', pid);
+  await auditar('Excluiu definitivamente', it.store, it.refId, labelReg(it.data));
+  await del('lixeira', tid);
+}
 const CAD = ['cadastros', 'clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos'];
 const ST = { '': '— avaliar —', C: 'Conforme', N: 'Não conforme', NA: 'N/A' };
 const DEFAULT_CHECK = {
@@ -36,7 +49,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 10);
+  const r = indexedDB.open('vistori', 11);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -402,7 +415,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'lixeira', 'auditoria', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -836,6 +849,7 @@ async function orcamento(id) {
   const enviar = $('#orc-enviar');
   if (enviar) enviar.onclick = async () => {
     await put('orcamentos', { ...o, status: (o.status === 'Aprovado' || o.status === 'Recusado') ? o.status : 'Enviado', atualizado: new Date().toISOString() });
+    await auditar('Enviou proposta', 'orcamentos', o.id, labelReg(o));
     const assunto = encodeURIComponent(`Proposta ${o.numero || ''} — VISTORI ENGENHARIA`);
     const corpo = encodeURIComponent(`Olá ${cliente?.nome || ''},\n\nSegue a proposta ${o.numero || ''} no valor de ${brl(t.tot)}.\nServiço: ${o.tipo || ''}\nImóvel: ${obra?.nome || ''}\nValidade: ${o.validade ? dataBR(o.validade) : '—'}\n\nAtenciosamente,\nVISTORI ENGENHARIA`);
     render();
@@ -848,11 +862,13 @@ async function orcamento(id) {
   const aprov = $('#orc-aprovar');
   if (aprov) aprov.onclick = async () => {
     await put('orcamentos', { ...o, status: 'Aprovado', aprovacaoCliente: { status: 'Aprovado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    await auditar('Cliente aprovou proposta', 'orcamentos', o.id, labelReg(o));
     render();
   };
   const recus = $('#orc-recusar');
   if (recus) recus.onclick = async () => {
     await put('orcamentos', { ...o, status: 'Recusado', aprovacaoCliente: { status: 'Recusado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    await auditar('Cliente recusou proposta', 'orcamentos', o.id, labelReg(o));
     render();
   };
 }
@@ -972,7 +988,9 @@ async function vistoria(id) {
     let foto = '';
     const file = $('#anom-foto')?.files[0];
     if (file) foto = await comprimir(file);
-    await put('anomalias', { id: uid(), vistoriaId: v.id, titulo: d.titulo, gravidade: d.gravidade || 'Média', ambiente: d.ambiente || '', descricao: d.descricao || '', prazo: d.prazo || '', responsavel: d.responsavel || '', status: 'Aberta', foto, criado: new Date().toISOString() });
+    const anomId = uid();
+    await put('anomalias', { id: anomId, vistoriaId: v.id, titulo: d.titulo, gravidade: d.gravidade || 'Média', ambiente: d.ambiente || '', descricao: d.descricao || '', prazo: d.prazo || '', responsavel: d.responsavel || '', status: 'Aberta', foto, criado: new Date().toISOString() });
+    await auditar('Registrou anomalia', 'anomalias', anomId, d.titulo);
     vistoria(v.id);
   };
   const vf = $('#vdoc-form');
@@ -983,7 +1001,9 @@ async function vistoria(id) {
     if (!file) return alert('Selecione um arquivo.');
     const src = file.type.startsWith('image/') ? await comprimir(file) : await lerArquivo(file);
     if (src.length > 750000) return alert('Arquivo muito grande para o armazenamento atual (limite ~700 KB).');
-    await put('documentos', { id: uid(), nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: '', obraId: obra?.id || '', vistoriaId: v.id, criado: new Date().toISOString() });
+    const docId = uid();
+    await put('documentos', { id: docId, nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: '', obraId: obra?.id || '', vistoriaId: v.id, criado: new Date().toISOString() });
+    await auditar('Anexou documento', 'documentos', docId, d.nome || file.name);
     vistoria(v.id);
   };
 }
@@ -1336,7 +1356,9 @@ async function documentos() {
     const src = file.type.startsWith('image/') ? await comprimir(file) : await lerArquivo(file);
     if (src.length > 750000) return alert('Arquivo muito grande para o armazenamento atual (limite ~700 KB).');
     const [tipoV, idV] = (d.vinculo || '').split(':');
-    await put('documentos', { id: uid(), nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: d.descricao || '', obraId: tipoV === 'obra' ? idV : '', vistoriaId: tipoV === 'vistoria' ? idV : '', criado: new Date().toISOString() });
+    const docId = uid();
+    await put('documentos', { id: docId, nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: d.descricao || '', obraId: tipoV === 'obra' ? idV : '', vistoriaId: tipoV === 'vistoria' ? idV : '', criado: new Date().toISOString() });
+    await auditar('Anexou documento', 'documentos', docId, d.nome || file.name);
     render();
   };
   const filtrar = () => {
@@ -1346,6 +1368,30 @@ async function documentos() {
   };
   const b = $('#d-busca'); if (b) b.oninput = filtrar;
   const st = $('#d-tipo'); if (st) st.onchange = filtrar;
+}
+
+/* ---------- lixeira ---------- */
+async function lixeira() {
+  const itens = (await all('lixeira')).sort((a, b) => (b.deletedAt || '').localeCompare(a.deletedAt || ''));
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Lixeira</h2><p>Itens excluídos que podem ser restaurados.</p></div>${itens.length ? '<button type="button" class="btn ghost" id="lx-esvaziar">Esvaziar lixeira</button>' : ''}</section>
+  <div class="card"><table><thead><tr><th>Item</th><th>Tipo</th><th>Excluído em</th><th>Por</th><th></th></tr></thead><tbody>
+  ${itens.map(it => `<tr><td>${esc(labelReg(it.data || {}))}</td><td>${esc(STORE_LABEL[it.store] || it.store)}</td><td>${fmt(it.deletedAt)}</td><td>${esc(it.por || '—')}</td><td class="act"><a href="#" data-restaurar="${it.id}">Restaurar</a><a href="#" data-lx-del="${it.id}">Excluir definitivamente</a></td></tr>`).join('') || '<tr><td colspan="5">Lixeira vazia.</td></tr>'}
+  </tbody></table></div>`;
+  const esv = $('#lx-esvaziar');
+  if (esv) esv.onclick = async () => {
+    if (!confirm('Excluir definitivamente TODOS os itens da lixeira? Não pode ser desfeito.')) return;
+    for (const it of itens) await excluirLixeira(it.id);
+    render();
+  };
+}
+
+/* ---------- auditoria ---------- */
+async function auditoria() {
+  const evs = (await all('auditoria')).sort((a, b) => (b.em || '').localeCompare(a.em || '')).slice(0, 300);
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Auditoria</h2><p>Trilha das últimas ações no sistema.</p></div></section>
+  <div class="card"><input id="a-busca" placeholder="Buscar ação, entidade ou detalhe…" style="margin-bottom:10px">
+  <div class="audit">${evs.map(e => `<div class="audit-item" data-txt="${esc(((e.acao || '') + ' ' + (STORE_LABEL[e.entidade] || e.entidade || '') + ' ' + (e.detalhe || '') + ' ' + (e.por || '')).toLowerCase())}"><span class="audit-when">${fmt(e.em)}</span><span class="audit-what"><b>${esc(e.acao)}</b> · ${esc(STORE_LABEL[e.entidade] || e.entidade || '—')}${e.detalhe ? ' — ' + esc(e.detalhe) : ''}</span><span class="audit-who">${esc(e.por || '—')}</span></div>`).join('') || '<p>Nenhuma ação registrada.</p>'}</div></div>`;
+  const b = $('#a-busca'); if (b) b.oninput = () => { const t = b.value.toLowerCase().trim(); document.querySelectorAll('.audit-item').forEach(el => { el.hidden = !!(t && !el.dataset.txt.includes(t)); }); };
 }
 
 /* ---------- configurações ---------- */
@@ -1414,7 +1460,7 @@ app.addEventListener('change', async e => {
     }
     return;
   }
-  if (t.dataset.anomStatus) { const a = await get('anomalias', t.dataset.anomStatus); if (a) { await put('anomalias', { ...a, status: t.value }); render(); } return; }
+  if (t.dataset.anomStatus) { const a = await get('anomalias', t.dataset.anomStatus); if (a) { await put('anomalias', { ...a, status: t.value }); await auditar('Alterou status de anomalia', 'anomalias', a.id, `${a.titulo} → ${t.value}`); render(); } return; }
   if (!curV) return;
   if (t.dataset.h) { curV[t.dataset.h] = t.value; await put('vistorias', curV); }
   else if (t.dataset.f) {
@@ -1446,13 +1492,19 @@ document.addEventListener('click', async e => {
       const t = await get('tipos', id);
       if ((await all('vistorias')).some(v => v.tipo === t?.nome)) return alert('Este tipo de serviço já foi usado em vistorias.');
     }
-    if (confirm('Excluir definitivamente?')) {
-      if (s === 'vistorias') {
-        const v = await get('vistorias', id);
-        for (const it of v?.itens || []) for (const f of it.fotos || []) if (f.id) await del('fotos', f.id);
-      }
+    if (s === 'vistorias') {
+      const v = await get('vistorias', id);
+      if (v?.status === 'assinada') return alert('Laudos assinados não podem ser excluídos. Reabra o laudo antes de excluir.');
+    }
+    if (confirm('Mover para a lixeira? Você poderá restaurar depois.')) {
+      const rec = await get(s, id);
+      if (!rec) return;
+      const extras = {};
+      if (s === 'vistorias') extras.fotos = (rec.itens || []).flatMap(it => (it.fotos || []).filter(f => f.id).map(f => f.id));
+      if (s === 'tipos') extras.precos = (await all('precos')).filter(p => p.tipoId === id).map(p => p.id);
+      await put('lixeira', { id: uid(), store: s, refId: id, data: rec, extras, deletedAt: new Date().toISOString(), por: USER?.email || 'local' });
       await del(s, id);
-      if (s === 'tipos') for (const p of await all('precos')) if (p.tipoId === id) await del('precos', p.id);
+      await auditar('Enviou para a lixeira', s, id, labelReg(rec));
       render();
     }
   } else if (d.rm) {
@@ -1489,15 +1541,25 @@ document.addEventListener('click', async e => {
     const o = await get('orcamentos', d.orcStatusId);
     if (!o) return;
     await put('orcamentos', { ...o, status: d.orcStatus, atualizado: new Date().toISOString() });
+    await auditar('Alterou status do orçamento', 'orcamentos', o.id, `${labelReg(o)} → ${d.orcStatus}`);
     render();
   } else if (d.receber) {
     e.preventDefault();
     const r = await get('recebimentos', d.receber);
-    if (r) { await put('recebimentos', { ...r, status: 'Recebido', pagoEm: new Date().toISOString() }); render(); }
+    if (r) { await put('recebimentos', { ...r, status: 'Recebido', pagoEm: new Date().toISOString() }); await auditar('Marcou como recebido', 'recebimentos', r.id, `${labelReg(r)} — ${brl(r.valor)}`); render(); }
   } else if (d.reabrir) {
     e.preventDefault();
     const r = await get('recebimentos', d.reabrir);
-    if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); render(); }
+    if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); await auditar('Reabriu recebimento', 'recebimentos', r.id, labelReg(r)); render(); }
+  } else if (d.restaurar) {
+    e.preventDefault();
+    const it = await get('lixeira', d.restaurar);
+    if (it) { await put(it.store, it.data); await del('lixeira', it.id); await auditar('Restaurou', it.store, it.refId, labelReg(it.data)); render(); }
+  } else if (d.lxDel) {
+    e.preventDefault();
+    if (!confirm('Excluir definitivamente? Não pode ser desfeito.')) return;
+    await excluirLixeira(d.lxDel);
+    render();
   } else if (d.download) {
     e.preventDefault();
     const arq = await get('documentos', d.download);
@@ -1514,6 +1576,7 @@ document.addEventListener('click', async e => {
     curV.status = 'rascunho';
     curV.versao = (curV.versao || 1) + 1;
     await put('vistorias', curV);
+    await auditar('Reabriu laudo', 'vistorias', curV.id, `v${curV.versao}: ${just.trim()}`);
     vistoria(curV.id);
   } else if (a.id === 'clr') { pad.clear(); }
   else if (a.id === 'sair') { e.preventDefault(); await F.signOut(auth); }
@@ -1542,6 +1605,7 @@ document.addEventListener('click', async e => {
     curV.versao = curV.versao || 1;
     curV.status = 'assinada';
     await put('vistorias', curV);
+    await auditar('Assinou laudo', 'vistorias', curV.id, curV.numeroLaudo || '');
     location.hash = `#/laudo/${curV.id}`;
   }
 });
@@ -1813,10 +1877,10 @@ async function render() {
     g.classList.toggle('has-active', ativo);
     if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
   });
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', documentos: 'Documentos', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', documentos: 'Documentos', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', lixeira: 'Lixeira', auditoria: 'Auditoria', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, documentos, lgpd, usuarios, configuracoes, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, documentos, lgpd, usuarios, configuracoes, lixeira, auditoria, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);

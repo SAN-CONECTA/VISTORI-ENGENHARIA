@@ -37,6 +37,10 @@ service cloud.firestore {
     match /orcamentos/{id} { allow read, create, update, delete: if autorizado(); }
     match /recebimentos/{id} { allow read, create, update, delete: if autorizado(); }
     match /acessos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /lixeira/{id} { allow read, create, delete: if autorizado(); }
+
+    // Trilha de auditoria: somente leitura e novos registros (não pode ser alterada nem apagada).
+    match /auditoria/{id} { allow read, create: if autorizado(); }
 
     // Depois de assinada, a vistoria não pode mais ser alterada.
     match /vistorias/{id} {
