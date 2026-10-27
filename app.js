@@ -416,7 +416,7 @@ async function migrarLocal(prog) {
 
 /* ---------- início ---------- */
 async function inicio() {
-  const [c, o, v, ag] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos')]);
+  const [c, o, v, ag, recs] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos'), all('recebimentos')]);
   const om = Object.fromEntries(o.map(x => [x.id, x]));
   const cm = Object.fromEntries(c.map(x => [x.id, x.nome]));
   const agora = new Date();
@@ -434,6 +434,16 @@ async function inicio() {
   for (const x of v) { atividades.push({ ts: x.criado, tipo: 'vistoria', v: x }); if (x.assinatura?.ts) atividades.push({ ts: x.assinatura.ts, tipo: 'laudo', v: x }); }
   for (const x of ag) atividades.push({ ts: x.criado, tipo: 'agenda', a: x });
   const ultimas = atividades.filter(e => e.ts).sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 6);
+  const base = new Date(); base.setHours(0, 0, 0, 0);
+  const semanas = [];
+  for (let k = 4; k >= 0; k--) { const fim = new Date(base); fim.setDate(fim.getDate() - k * 7); fim.setHours(23, 59, 59, 999); const ini = new Date(fim); ini.setDate(ini.getDate() - 6); ini.setHours(0, 0, 0, 0); semanas.push({ ini, fim, label: ini.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }); }
+  const vSem = semanas.map(s => v.filter(x => { const d = x.data ? new Date(x.data + 'T12:00:00') : new Date(x.criado || 0); return d >= s.ini && d <= s.fim; }).length);
+  const meses = [];
+  for (let k = 5; k >= 0; k--) { const d = new Date(base.getFullYear(), base.getMonth() - k, 1); meses.push({ y: d.getFullYear(), m: d.getMonth(), label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') }); }
+  const prevMes = meses.map(x => recs.filter(r => { const d = r.vencimento ? new Date(r.vencimento + 'T12:00:00') : new Date(r.criado || 0); return d.getFullYear() === x.y && d.getMonth() === x.m; }).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const recMes = meses.map(x => recs.filter(r => r.status === 'Recebido' && r.pagoEm && new Date(r.pagoEm).getFullYear() === x.y && new Date(r.pagoEm).getMonth() === x.m).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const maxV = Math.max(1, ...vSem);
+  const maxR = Math.max(1, ...prevMes, ...recMes);
   const statusClass = s => 'agenda-' + String(s || '').toLowerCase().replace(/\s+/g, '-');
   const evt = e => {
     if (e.tipo === 'agenda') { const o = om[e.a.obraId]; return { icon: 'AG', txt: 'Visita agendada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${dataBR(e.a.data)} ${e.a.hora || ''}`.trim(), href: `#/agenda?e=${e.a.id}` }; }
@@ -478,6 +488,17 @@ async function inicio() {
     <aside class="card dashboard-activity">
       <div class="section-heading"><div><h3>Atividades recentes</h3><p>Últimos movimentos no sistema.</p></div></div>
       ${ultimas.length ? `<ol class="timeline">${ultimas.map(e => { const d = evt(e); return `<li><span class="tl-code">${d.icon}</span><div><a href="${d.href}">${esc(d.txt)}</a><small>${esc(d.sub)}</small><em>${fmt(e.ts)}</em></div></li>`; }).join('')}</ol>` : '<p>Nenhuma atividade registrada ainda.</p>'}
+    </aside>
+  </section>
+  <section class="dashboard-grid">
+    <div class="card">
+      <div class="section-heading"><div><h3>Vistorias por semana</h3><p>Últimas 5 semanas.</p></div><a href="#/vistorias">Ver vistorias →</a></div>
+      <div class="chart" role="img" aria-label="Vistorias por semana">${semanas.map((s, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(vSem[i] / maxV * 100)}%" title="${vSem[i]} vistoria(s)"></span></div><b>${vSem[i]}</b><small>${s.label}</small></div>`).join('')}</div>
+    </div>
+    <aside class="card">
+      <div class="section-heading"><div><h3>Receita prevista × recebida</h3><p>Últimos 6 meses.</p></div><a href="#/financeiro">Ver financeiro →</a></div>
+      <div class="chart" role="img" aria-label="Receita prevista e recebida por mês">${meses.map((x, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(prevMes[i] / maxR * 100)}%" title="Prevista ${brl(prevMes[i])}"></span><span class="bar alt" style="height:${Math.round(recMes[i] / maxR * 100)}%" title="Recebida ${brl(recMes[i])}"></span></div><small>${x.label}</small></div>`).join('')}</div>
+      <div class="chart-legend"><span><i class="lg-prev"></i>Prevista</span><span><i class="lg-rec"></i>Recebida</span></div>
     </aside>
   </section>`;
 }

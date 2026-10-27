@@ -209,6 +209,17 @@ td input[type=number]{min-width:96px}
 .timeline a{font-weight:600;font-size:.86rem;text-decoration:none;color:var(--text)}
 .timeline small{color:var(--subtle);font-size:.76rem}
 .timeline em{color:var(--subtle);font-style:normal;font-size:.7rem;margin-top:2px}
+.chart{display:flex;align-items:flex-end;gap:10px;padding:6px 2px 0}
+.chart-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px}
+.chart-col .bars{height:140px;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:4px}
+.chart-col .bar{width:60%;max-width:34px;min-height:2px;border-radius:6px 6px 0 0;background:var(--c);transition:height .3s ease}
+.chart-col .bar.alt{background:var(--gold)}
+.chart-col b{font:600 .72rem 'IBM Plex Mono',monospace;color:var(--muted)}
+.chart-col small{color:var(--subtle);font-size:.66rem;white-space:nowrap}
+.chart-legend{display:flex;gap:14px;margin-top:10px;font-size:.74rem;color:var(--subtle)}
+.chart-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.chart-legend .lg-prev{background:var(--c)}
+.chart-legend .lg-rec{background:var(--gold)}
 .orc-itens input{min-width:90px}
 .orc-itens td:first-child input{min-width:180px}
 .orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}
