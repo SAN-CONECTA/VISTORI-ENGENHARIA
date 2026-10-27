@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// Cole este conteúdo em: Firebase Console > Firestore Database > Regras > Publicar.
-// Bootstrap: os e-mails fixos abaixo sempre entram e podem autorizar outros na tela "Usuários e acessos".
+// Cole em: Firebase Console > Firestore Database > Regras > Publicar.
+// Bootstrap: estes e-mails sempre entram e podem autorizar outros em "Usuários e acessos".
 // Os demais e-mails precisam existir em /acessos/{email}.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -12,22 +12,37 @@ service cloud.firestore {
     }
 
     function bootstrap() {
-      return emailAtual() in ['sandro@santecnologia.com', 'sandro@sanconecta.com'];
+      return emailAtual() in [
+        'sandro@santecnologia.com',
+        'victoriarochaeng@hotmail.com',
+        'sandro@sanconecta.com'
+      ];
     }
 
     function autorizado() {
-      return request.auth != null && emailAtual() != '' &&
-        (bootstrap() || exists(/databases/$(database)/documents/acessos/$(emailAtual())));
+      return request.auth != null
+        && emailAtual() != ''
+        && (bootstrap() || exists(/databases/$(database)/documents/acessos/$(emailAtual())));
     }
 
-    // Lista de e-mails autorizados (gerida na tela "Usuários e acessos").
-    match /acessos/{doc} {
-      allow read, write: if autorizado();
-    }
+    match /clientes/{id} { allow read, create, update, delete: if autorizado(); }
+    match /obras/{id} { allow read, create, update, delete: if autorizado(); }
+    match /fornecedores/{id} { allow read, create, update, delete: if autorizado(); }
+    match /tipos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /catalogo/{id} { allow read, create, update, delete: if autorizado(); }
+    match /precos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /config/{id} { allow read, create, update, delete: if autorizado(); }
+    match /fotos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /agendamentos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /orcamentos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /recebimentos/{id} { allow read, create, update, delete: if autorizado(); }
+    match /acessos/{id} { allow read, create, update, delete: if autorizado(); }
 
-    // Todo o resto exige usuário autorizado.
-    match /{document=**} {
-      allow read, write: if autorizado();
+    // Depois de assinada, a vistoria não pode mais ser alterada.
+    match /vistorias/{id} {
+      allow read, create: if autorizado();
+      allow update: if autorizado() && resource.data.status != 'assinada';
+      allow delete: if autorizado() && resource.data.status != 'assinada';
     }
   }
 }
