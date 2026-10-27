@@ -186,6 +186,27 @@ td input[type=number]{min-width:96px}
 .timeline a{font-weight:600;font-size:.86rem;text-decoration:none;color:var(--text)}
 .timeline small{color:var(--subtle);font-size:.76rem}
 .timeline em{color:var(--subtle);font-style:normal;font-size:.7rem;margin-top:2px}
+.orc-itens input{min-width:90px}
+.orc-itens td:first-child input{min-width:180px}
+.orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}
+.orc-totais>div{display:flex;justify-content:space-between;gap:24px;min-width:240px}
+.orc-totais span{color:var(--muted);font-size:.86rem}
+.orc-totais b{font:600 .9rem 'IBM Plex Mono',monospace}
+.orc-totais .total{border-top:1px solid var(--bd);padding-top:6px}
+.orc-totais .total span,.orc-totais .total b{color:var(--text);font-size:1rem}
+.proposta-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.proposta-head h1{margin:0}
+.proposta-head p{color:var(--subtle);margin:2px 0 0}
+.proposta-val{text-align:right}
+.proposta-val small{display:block;color:var(--subtle);font-size:.72rem}
+.proposta-val b{font:600 .95rem 'IBM Plex Mono',monospace}
+.orc-proposta{width:100%;border-collapse:collapse;margin:12px 0}
+.orc-proposta th,.orc-proposta td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--bd)}
+.orc-proposta th:last-child,.orc-proposta td:last-child{text-align:right}
+.status-badge.orc-rascunho{background:var(--c-light);color:var(--c-dark)}
+.status-badge.orc-enviado{background:var(--info-bg);color:var(--info)}
+.status-badge.orc-aprovado{background:var(--ok-bg);color:var(--ok)}
+.status-badge.orc-recusado{background:var(--bad-bg);color:var(--bad)}
 .status-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:600;white-space:nowrap}
 .status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .status-badge.signed{background:#f6efe3;color:#7a5a22}

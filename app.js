@@ -1,13 +1,13 @@
 'use strict';
-const VERSION = '0.4.5';
+const VERSION = '0.5.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 4);
+  const r = indexedDB.open('vistori', 5);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -397,7 +397,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'agendamentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'agendamentos', 'orcamentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -621,6 +621,140 @@ async function vistorias() {
     await put('vistorias', v);
     location.hash = `#/vistoria/${v.id}`;
   };
+}
+
+/* ---------- orçamentos ---------- */
+const ORC_STATUS = ['Rascunho', 'Enviado', 'Aprovado', 'Recusado'];
+const orcTotais = o => {
+  const sub = (o.itens || []).reduce((n, i) => n + (Number(i.qtd) || 0) * (Number(i.valor) || 0), 0);
+  const dsc = sub * (Number(o.desconto) || 0) / 100;
+  const tax = sub * (Number(o.taxas) || 0) / 100;
+  return { sub, dsc, tax, tot: sub - dsc + tax };
+};
+const orcNumero = lista => {
+  const ano = new Date().getFullYear();
+  const nums = lista.map(o => o.numero || '').filter(n => n.startsWith(`ORC-${ano}-`)).map(n => parseInt(n.split('-')[2], 10)).filter(n => !isNaN(n));
+  return `ORC-${ano}-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(4, '0')}`;
+};
+const orcItemRow = (it = {}) => `<tr>
+  <td><input data-of="descricao" value="${esc(it.descricao || '')}" placeholder="Descrição do item"></td>
+  <td><input data-of="qtd" type="number" step="any" min="0" value="${esc(it.qtd ?? 1)}"></td>
+  <td><select data-of="unidade">${UNIDADES.map(u => `<option value="${esc(u)}" ${u === (it.unidade || 'un') ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></td>
+  <td><input data-of="valor" type="number" step="any" min="0" value="${esc(it.valor ?? '')}"></td>
+  <td><a href="#" data-orc-rm="1">remover</a></td>
+</tr>`;
+
+async function orcamentos(q) {
+  const [os, obras, cls, ts] = await Promise.all([all('orcamentos'), all('obras'), all('clientes'), getTipos()]);
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const om = Object.fromEntries(obras.map(o => [o.id, o]));
+  const qp = new URLSearchParams(q || '');
+  const cur = os.find(x => x.id === qp.get('e')) || {};
+  const mostrarForm = qp.has('nova') || !!cur.id;
+  const itens0 = (cur.itens && cur.itens.length) ? cur.itens : [{ descricao: '', qtd: 1, unidade: 'un', valor: '' }];
+  const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || 'Cliente não informado'}`]);
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Orçamentos</h2><p>Propostas comerciais vinculadas a imóveis e tipos de serviço.</p></div>
+    <a class="btn" href="#/orcamentos?nova=1">+ Novo orçamento</a></section>
+  ${mostrarForm ? `<form id="orc-form" class="card">
+    <div class="grid">
+      ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', req: 1, opts: opObra }, cur.obraId || '')}
+      ${fieldHtml({ k: 'tipo', l: 'Tipo de serviço', req: 1, opts: ts.map(t => [t.nome, t.nome]) }, cur.tipo || '')}
+      ${fieldHtml({ k: 'status', l: 'Status', req: 1, opts: ORC_STATUS.map(s => [s, s]) }, cur.status || 'Rascunho')}
+      ${fieldHtml({ k: 'validade', l: 'Validade', type: 'date' }, cur.validade || '')}
+    </div>
+    <h3 style="margin-top:14px">Itens</h3>
+    <div style="overflow-x:auto"><table class="orc-itens"><thead><tr><th>Descrição</th><th>Qtd.</th><th>Un.</th><th>Valor unit.</th><th></th></tr></thead><tbody id="orc-itens">
+      ${itens0.map(it => orcItemRow(it)).join('')}
+    </tbody></table></div>
+    <div class="row"><button type="button" class="btn ghost" id="orc-add">+ Adicionar item</button></div>
+    <div class="grid" style="margin-top:12px">
+      ${fieldHtml({ k: 'desconto', l: 'Desconto (%)', type: 'number' }, cur.desconto ?? '')}
+      ${fieldHtml({ k: 'taxas', l: 'Taxas / ISS (%)', type: 'number' }, cur.taxas ?? '')}
+      ${fieldHtml({ k: 'condicoes', l: 'Condições de pagamento' }, cur.condicoes || '')}
+      ${fieldHtml({ k: 'observacoes', l: 'Observações', type: 'textarea' }, cur.observacoes || '')}
+    </div>
+    <div class="orc-totais">
+      <div><span>Subtotal</span><b id="orc-sub">—</b></div>
+      <div><span>Desconto</span><b id="orc-dsc">—</b></div>
+      <div><span>Taxas</span><b id="orc-tax">—</b></div>
+      <div class="total"><span>Total</span><b id="orc-tot">—</b></div>
+    </div>
+    <div class="row"><button class="btn">${cur.id ? 'Salvar orçamento' : 'Criar orçamento'}</button><a class="btn ghost" href="#/orcamentos">Cancelar</a></div>
+  </form>` : (!obras.length ? '<div class="warn">Cadastre um cliente e um imóvel/obra antes de criar um orçamento.</div>' : '')}
+  <div class="card">
+    <div class="list-filters">
+      <input id="o-busca" placeholder="Buscar número, imóvel, cliente ou serviço…">
+      <select id="o-status"><option value="">Todos os status</option>${ORC_STATUS.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>
+    </div>
+    <table><thead><tr><th>Número</th><th>Imóvel/Cliente</th><th>Tipo</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody id="o-tbody">
+    ${os.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(o => { const obra = om[o.obraId]; const t = orcTotais(o); return `<tr data-status="${esc(o.status)}"><td><b>${esc(o.numero || '—')}</b><br><small>${esc(o.validade ? 'val. ' + o.validade : '')}</small></td><td>${esc(obra?.nome || '?')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(o.tipo)}</td><td>${brl(t.tot)}</td><td><span class="status-badge orc-${esc(String(o.status || '').toLowerCase())}">${esc(o.status)}</span></td>
+    <td class="act"><a href="#/orcamento/${o.id}">Ver proposta</a><a href="#/orcamentos?e=${o.id}">Editar</a><a href="#" data-del="orcamentos:${o.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhum orçamento cadastrado.</td></tr>'}
+    <tr id="o-vazio" hidden><td colspan="6">Nenhum registro corresponde aos filtros.</td></tr>
+    </tbody></table>
+  </div>`;
+  const lerItens = () => [...document.querySelectorAll('#orc-itens tr')].map(tr => ({
+    descricao: tr.querySelector('[data-of=descricao]').value.trim(),
+    qtd: tr.querySelector('[data-of=qtd]').value,
+    unidade: tr.querySelector('[data-of=unidade]').value,
+    valor: tr.querySelector('[data-of=valor]').value
+  })).filter(i => i.descricao || i.valor);
+  const recalcular = () => {
+    const t = orcTotais({ itens: lerItens(), desconto: $('#orc-form [name=desconto]')?.value, taxas: $('#orc-form [name=taxas]')?.value });
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = brl(v); };
+    set('orc-sub', t.sub); set('orc-dsc', t.dsc); set('orc-tax', t.tax); set('orc-tot', t.tot);
+  };
+  const form = $('#orc-form');
+  if (form) {
+    $('#orc-add').onclick = () => { $('#orc-itens').insertAdjacentHTML('beforeend', orcItemRow()); recalcular(); };
+    $('#orc-itens').addEventListener('click', e => { const a = e.target.closest('[data-orc-rm]'); if (!a) return; e.preventDefault(); const tr = a.closest('tr'); if ($('#orc-itens').children.length > 1) tr.remove(); else tr.querySelectorAll('input').forEach(i => i.value = ''); recalcular(); });
+    form.addEventListener('input', recalcular);
+    recalcular();
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(form));
+      const itens = lerItens();
+      if (!itens.length) return alert('Adicione ao menos um item.');
+      const obra = om[d.obraId];
+      const o = { ...cur, ...d, itens, clienteId: obra?.clienteId || cur.clienteId || '', numero: cur.numero || orcNumero(os), id: cur.id || uid(), criado: cur.criado || new Date().toISOString(), atualizado: new Date().toISOString() };
+      await put('orcamentos', o);
+      location.hash = '#/orcamentos'; render();
+    };
+  }
+  const filtrar = () => {
+    const texto = ($('#o-busca')?.value || '').toLowerCase().trim();
+    const st = $('#o-status')?.value || '';
+    const rows = [...document.querySelectorAll('#o-tbody tr[data-status]')];
+    rows.forEach(r => { let ok = true; if (texto && !r.textContent.toLowerCase().includes(texto)) ok = false; if (st && r.dataset.status !== st) ok = false; r.hidden = !ok; });
+    const vis = rows.filter(r => !r.hidden).length;
+    const vazio = $('#o-vazio'); if (vazio) vazio.hidden = !(rows.length > 0 && vis === 0);
+  };
+  const b = $('#o-busca'); if (b) b.oninput = filtrar;
+  const s = $('#o-status'); if (s) s.onchange = filtrar;
+}
+
+async function orcamento(id) {
+  const o = await get('orcamentos', id);
+  if (!o) { app.innerHTML = '<div class="warn">Orçamento não encontrado.</div>'; return; }
+  const obra = o.obraId ? await get('obras', o.obraId) : null;
+  const cliente = obra ? await get('clientes', obra.clienteId) : null;
+  const t = orcTotais(o);
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a></div>
+  <div class="card laudo proposta">
+    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <div class="proposta-head"><div><h1>Proposta Comercial</h1><p>${esc(o.numero || '')} · ${esc(o.status || '')}</p></div><div class="proposta-val"><small>Validade</small><b>${o.validade ? esc(dataBR(o.validade)) : '—'}</b></div></div>
+    <p><b>Cliente:</b> ${esc(cliente?.nome || '—')} ${esc(cliente?.documento || '')}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome || '—')} — ${esc(obra?.endereco || '')} ${esc(obra?.cidade || '')}${obra?.uf ? '/' + esc(obra.uf) : ''}<br><b>Serviço:</b> ${esc(o.tipo || '—')}</p>
+    <table class="orc-proposta"><thead><tr><th>Descrição</th><th>Qtd.</th><th>Un.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>
+      ${(o.itens || []).map(i => `<tr><td>${esc(i.descricao)}</td><td>${esc(i.qtd)}</td><td>${esc(i.unidade)}</td><td>${brl(i.valor)}</td><td>${brl((Number(i.qtd) || 0) * (Number(i.valor) || 0))}</td></tr>`).join('') || '<tr><td colspan="5">Sem itens.</td></tr>'}
+    </tbody></table>
+    <div class="orc-totais">
+      <div><span>Subtotal</span><b>${brl(t.sub)}</b></div>
+      <div><span>Desconto (${esc(o.desconto || 0)}%)</span><b>${brl(t.dsc)}</b></div>
+      <div><span>Taxas (${esc(o.taxas || 0)}%)</span><b>${brl(t.tax)}</b></div>
+      <div class="total"><span>Total</span><b>${brl(t.tot)}</b></div>
+    </div>
+    ${o.condicoes ? `<p><b>Condições de pagamento:</b> ${esc(o.condicoes)}</p>` : ''}
+    ${o.observacoes ? `<p><b>Observações:</b> ${esc(o.observacoes)}</p>` : ''}
+  </div>`;
 }
 
 const hf = (v, k, l, type = 'text') => `<div><label>${l}</label><input type="${type}" ${type === 'number' ? 'step="any" min="0"' : ''} data-h="${k}" value="${esc(v[k])}"></div>`;
@@ -989,12 +1123,12 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', checklist: 'Checklist padrão', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), checklist, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
