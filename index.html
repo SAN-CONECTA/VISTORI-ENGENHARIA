@@ -7,29 +7,50 @@
 <title>VISTORI-ENGENHARIA</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
-<header class="noprint">
-  <div class="headerbar">
-    <a class="brand" href="#/"><img src="logo-emblema.png" alt="" height="44"><span><b>VISTORI</b><i>ENGENHARIA</i></span></a>
-    <small id="ver"></small>
-    <span id="userbox" class="userbox noprint"></span>
-    <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav" aria-label="Abrir menu">
-      <span></span><span></span><span></span>
-    </button>
-  </div>
-  <nav id="nav">
-    <a href="#/">Início</a>
-    <a href="#/cadastros">Cadastros</a>
-    <a href="#/vistorias">Vistorias</a>
-    <a href="#/checklist">Checklist</a>
-    <a href="#/backup">Backup</a>
-  </nav>
-</header>
-<main id="app">Carregando…</main>
-<footer>VISTORI-ENGENHARIA · SAN-CONECTA · <span id="ver2"></span></footer>
+<div class="app-shell">
+  <aside id="sidebar" class="sidebar noprint">
+    <div class="sidebar-brand">
+      <a class="brand" href="#/" aria-label="VISTORI Engenharia — Visão geral">
+        <img src="logo-emblema.png" alt="">
+        <span><b>VISTORI</b><i>ENGENHARIA</i></span>
+      </a>
+      <small id="ver"></small>
+    </div>
+    <nav id="nav" aria-label="Menu principal">
+      <a href="#/"><span class="nav-code">VG</span><span class="nav-label">Visão geral</span></a>
+      <a href="#/vistorias"><span class="nav-code">VI</span><span class="nav-label">Vistorias</span></a>
+      <a href="#/clientes"><span class="nav-code">CL</span><span class="nav-label">Clientes</span></a>
+      <a href="#/obras"><span class="nav-code">IO</span><span class="nav-label">Imóveis e obras</span></a>
+      <a href="#/cadastros"><span class="nav-code">CA</span><span class="nav-label">Cadastros</span></a>
+      <a href="#/checklist"><span class="nav-code">CK</span><span class="nav-label">Checklist</span></a>
+      <a href="#/backup"><span class="nav-code">BK</span><span class="nav-label">Backup</span></a>
+    </nav>
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Recolher menu">« <span>Recolher menu</span></button>
+  </aside>
+  <button id="nav-backdrop" class="nav-backdrop noprint" type="button" aria-label="Fechar menu"></button>
+  <section class="app-frame">
+    <header class="topbar noprint">
+      <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar" aria-label="Abrir menu">
+        <span></span><span></span><span></span>
+      </button>
+      <h1 id="page-title">Visão geral</h1>
+      <div class="topbar-actions">
+        <span id="syncbox" class="syncbox" role="status"></span>
+        <span id="userbox" class="userbox"></span>
+      </div>
+    </header>
+    <div id="offline-banner" class="offline-banner noprint" hidden><b>Sem conexão.</b> O que você registrar fica salvo neste aparelho e será sincronizado depois.</div>
+    <main id="app">Carregando…</main>
+    <footer>VISTORI-ENGENHARIA · SAN-CONECTA · <span id="ver2"></span></footer>
+  </section>
+</div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -622,9 +622,16 @@ document.addEventListener('click', async e => {
 /* ---------- login e inicialização ---------- */
 function userBox() {
   const el = $('#userbox'); if (!el) return;
-  const off = navigator.onLine ? '' : '<span class="off">● offline</span> ';
-  el.innerHTML = MODO === 'local' ? `${off}<span class="tag">modo local (teste)</span>`
-    : USER ? `${off}<small>${esc(USER.email)}</small> ${MODO === 'nuvem' ? '<a href="#" id="sair">Sair</a>' : ''}` : off;
+  const sync = $('#syncbox');
+  const banner = $('#offline-banner');
+  const online = navigator.onLine;
+  if (sync) {
+    sync.classList.toggle('offline', MODO === 'local' || !online);
+    sync.textContent = MODO === 'local' ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
+  }
+  if (banner) banner.hidden = MODO === 'local' || online;
+  el.innerHTML = MODO === 'local' ? '<span class="tag">Ambiente de teste</span>'
+    : USER ? `<small>${esc(USER.email)}</small>${MODO === 'nuvem' ? '<a href="#" id="sair">Sair</a>' : ''}` : '';
 }
 addEventListener('online', userBox);
 addEventListener('offline', userBox);
@@ -632,18 +639,30 @@ addEventListener('offline', userBox);
 /* ---------- adaptação da interface a telas menores ---------- */
 const nav = $('#nav');
 const navToggle = $('#nav-toggle');
+const sidebar = $('#sidebar');
+const navBackdrop = $('#nav-backdrop');
+const sidebarToggle = $('#sidebar-toggle');
+document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('vistori_menu_recolhido') === '1');
 function closeNav() {
-  nav.classList.remove('open');
+  sidebar.classList.remove('open');
+  document.body.classList.remove('nav-open');
   navToggle.setAttribute('aria-expanded', 'false');
   navToggle.setAttribute('aria-label', 'Abrir menu');
 }
 navToggle.addEventListener('click', () => {
-  const open = nav.classList.toggle('open');
+  const open = sidebar.classList.toggle('open');
+  document.body.classList.toggle('nav-open', open);
   navToggle.setAttribute('aria-expanded', String(open));
   navToggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
 });
 nav.addEventListener('click', e => { if (e.target.closest('a')) closeNav(); });
-addEventListener('resize', () => { if (innerWidth > 700) closeNav(); });
+navBackdrop.addEventListener('click', closeNav);
+sidebarToggle.addEventListener('click', () => {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('vistori_menu_recolhido', collapsed ? '1' : '0');
+  sidebarToggle.setAttribute('aria-label', collapsed ? 'Expandir menu' : 'Recolher menu');
+});
+addEventListener('resize', () => { if (innerWidth > 900) closeNav(); });
 
 function responsiveTables() {
   app.querySelectorAll('table:not(.matrix-table)').forEach(table => {
@@ -737,8 +756,10 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
+  const titles = { '': 'Visão geral', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
   const R = { '': inicio, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
