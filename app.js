@@ -1,8 +1,10 @@
 'use strict';
-const VERSION = '0.3.1';
+const VERSION = '0.4.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
-const MODO = localStorage.getItem('vistori_modo') || 'nuvem';
+const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
+  || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
+const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
 const STORES = ['clientes', 'obras', 'vistorias', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
 const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'fornecedores', 'catalogo', 'precos'];
@@ -378,17 +380,43 @@ async function migrarLocal(prog) {
 /* ---------- início ---------- */
 async function inicio() {
   const [c, o, v] = await Promise.all([all('clientes'), all('obras'), all('vistorias')]);
+  const om = Object.fromEntries(o.map(x => [x.id, x]));
+  const agora = new Date();
+  const saudacao = agora.getHours() < 12 ? 'Bom dia' : agora.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
+  const dataExtenso = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  const emAndamento = v.filter(x => x.status !== 'assinada');
+  const assinadas = v.filter(x => x.status === 'assinada');
+  const naoConformes = v.reduce((n, x) => n + (x.itens || []).filter(i => i.status === 'N').length, 0);
+  const semAvaliacao = v.reduce((n, x) => n + (x.itens || []).filter(i => !i.status).length, 0);
+  const recentes = [...v].sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).slice(0, 5);
   const aviso = MODO === 'local'
     ? '<div class="warn"><b>Modo local (teste):</b> os dados ficam somente neste aparelho/navegador.</div>'
     : '<div class="ok">Dados na nuvem (Firebase). Funciona offline: o que você salvar sem internet sobe sozinho quando a conexão voltar.</div>';
-  app.innerHTML = `<div class="card hero"><img src="logo.png" alt="VISTORI ENGENHARIA"></div>
+  const kpi = (href, titulo, valor, detalhe, tone = '') => `<a class="kpi-card ${tone}" href="${href}"><span>${titulo}</span><strong>${valor}</strong><small>${detalhe}</small><i>Ver detalhes →</i></a>`;
+  app.innerHTML = `<section class="dashboard-heading">
+    <div><h2>${saudacao}</h2><p>${dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1)}</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
+  </section>
   ${aviso}${await bannerMigracao()}
-  <div class="grid">
-    <div class="card"><div class="stat">${c.length}</div>Clientes</div>
-    <div class="card"><div class="stat">${o.length}</div>Imóveis/Obras</div>
-    <div class="card"><div class="stat">${v.filter(x => x.status !== 'assinada').length}</div>Vistorias em andamento</div>
-    <div class="card"><div class="stat">${v.filter(x => x.status === 'assinada').length}</div>Laudos assinados</div>
-  </div>`;
+  <section class="kpi-grid" aria-label="Resumo operacional">
+    ${kpi('#/vistorias', 'Vistorias em andamento', emAndamento.length, emAndamento.length ? 'Registros que ainda podem ser editados' : 'Nenhuma vistoria pendente')}
+    ${kpi('#/vistorias', 'Laudos assinados', assinadas.length, assinadas.length ? 'Documentos finalizados' : 'Nenhum laudo assinado', 'success')}
+    ${kpi('#/clientes', 'Clientes', c.length, `${o.length} imóvel(is) ou obra(s) vinculados`)}
+    ${kpi('#/vistorias', 'Não conformidades', naoConformes, semAvaliacao ? `${semAvaliacao} item(ns) ainda sem avaliação` : 'Todos os itens avaliados', naoConformes ? 'danger' : 'success')}
+  </section>
+  <section class="dashboard-grid">
+    <div class="card dashboard-recent"><div class="section-heading"><div><h3>Vistorias recentes</h3><p>Acompanhe os últimos registros do sistema.</p></div><a href="#/vistorias">Ver todas →</a></div>
+      <table><thead><tr><th>Data</th><th>Imóvel/Obra</th><th>Tipo</th><th>Status</th></tr></thead><tbody>
+      ${recentes.map(x => `<tr><td>${esc(x.data)}</td><td><a href="#/vistoria/${x.id}">${esc(om[x.obraId]?.nome || 'Não informado')}</a></td><td>${esc(x.tipo)}</td><td><span class="status-badge ${x.status === 'assinada' ? 'signed' : 'draft'}">${x.status === 'assinada' ? 'Assinada' : 'Em andamento'}</span></td></tr>`).join('') || '<tr><td colspan="4">Nenhuma vistoria cadastrada. Use o botão Nova vistoria para começar.</td></tr>'}
+      </tbody></table>
+    </div>
+    <aside class="card dashboard-summary"><div class="section-heading"><div><h3>Estrutura da base</h3><p>Cadastros usados nas vistorias.</p></div></div>
+      <a href="#/clientes"><span>Clientes cadastrados</span><b>${c.length}</b></a>
+      <a href="#/obras"><span>Imóveis e obras</span><b>${o.length}</b></a>
+      <a href="#/cadastros"><span>Gerenciar cadastros auxiliares</span><b>→</b></a>
+      <a href="#/backup"><span>Exportar cópia de segurança</span><b>→</b></a>
+    </aside>
+  </section>`;
 }
 
 /* ---------- vistorias ---------- */
@@ -622,9 +650,17 @@ document.addEventListener('click', async e => {
 /* ---------- login e inicialização ---------- */
 function userBox() {
   const el = $('#userbox'); if (!el) return;
-  const off = navigator.onLine ? '' : '<span class="off">● offline</span> ';
-  el.innerHTML = MODO === 'local' ? `${off}<span class="tag">modo local (teste)</span>`
-    : USER ? `${off}<small>${esc(USER.email)}</small> ${MODO === 'nuvem' ? '<a href="#" id="sair">Sair</a>' : ''}` : off;
+  const sync = $('#syncbox');
+  const banner = $('#offline-banner');
+  const online = navigator.onLine;
+  if (sync) {
+    sync.classList.toggle('offline', !online);
+    sync.classList.toggle('local', MODO === 'local');
+    sync.textContent = MODO === 'local' ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
+  }
+  if (banner) banner.hidden = MODO === 'local' || online;
+  el.innerHTML = MODO === 'local' ? '<span class="tag">Ambiente de teste</span>'
+    : USER ? `<small>${esc(USER.email)}</small>${MODO === 'nuvem' ? '<a href="#" id="sair">Sair</a>' : ''}` : '';
 }
 addEventListener('online', userBox);
 addEventListener('offline', userBox);
@@ -632,18 +668,30 @@ addEventListener('offline', userBox);
 /* ---------- adaptação da interface a telas menores ---------- */
 const nav = $('#nav');
 const navToggle = $('#nav-toggle');
+const sidebar = $('#sidebar');
+const navBackdrop = $('#nav-backdrop');
+const sidebarToggle = $('#sidebar-toggle');
+document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('vistori_menu_recolhido') === '1');
 function closeNav() {
-  nav.classList.remove('open');
+  sidebar.classList.remove('open');
+  document.body.classList.remove('nav-open');
   navToggle.setAttribute('aria-expanded', 'false');
   navToggle.setAttribute('aria-label', 'Abrir menu');
 }
 navToggle.addEventListener('click', () => {
-  const open = nav.classList.toggle('open');
+  const open = sidebar.classList.toggle('open');
+  document.body.classList.toggle('nav-open', open);
   navToggle.setAttribute('aria-expanded', String(open));
   navToggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
 });
 nav.addEventListener('click', e => { if (e.target.closest('a')) closeNav(); });
-addEventListener('resize', () => { if (innerWidth > 700) closeNav(); });
+navBackdrop.addEventListener('click', closeNav);
+sidebarToggle.addEventListener('click', () => {
+  const collapsed = document.body.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('vistori_menu_recolhido', collapsed ? '1' : '0');
+  sidebarToggle.setAttribute('aria-label', collapsed ? 'Expandir menu' : 'Recolher menu');
+});
+addEventListener('resize', () => { if (innerWidth > 900) closeNav(); });
 
 function responsiveTables() {
   app.querySelectorAll('table:not(.matrix-table)').forEach(table => {
@@ -669,17 +717,37 @@ const msgAuth = err => ({
 
 function mostrarLogin() {
   document.body.classList.add('deslogado');
-  app.innerHTML = `<div class="card login"><img src="logo.png" alt="VISTORI ENGENHARIA"><h2>Entrar</h2>
-  <div class="warn" id="lerr" hidden></div>
-  <form id="lf"><label>E-mail</label><input type="email" name="email" required autocomplete="username">
-  <label>Senha</label><input type="password" name="senha" required autocomplete="current-password">
-  <button class="btn">Entrar</button> <a href="#" id="esqueci">Esqueci a senha</a></form></div>`;
+  const conectado = navigator.onLine;
+  app.innerHTML = `<div class="login-layout">
+    <section class="login-showcase" aria-label="Apresentação do sistema">
+      <div class="login-brand"><img src="logo-emblema.png" alt=""><span><b>VISTORI</b><i>ENGENHARIA</i></span></div>
+      <div class="login-copy"><h1>Vistorias, laudos e obras organizados do campo ao escritório.</h1>
+      <p>Checklists que funcionam sem internet, fotos organizadas e laudos com verificação de integridade.</p></div>
+      <div class="login-feature"><span>VI</span><div><b>Trabalho de campo sem interrupções</b><small>Os registros ficam salvos no aparelho e sincronizam quando a conexão voltar.</small></div></div>
+      <small class="login-version">v${VERSION} · ambiente seguro</small>
+    </section>
+    <section class="login-panel">
+      <div class="login-form-wrap">
+        <div class="login-mobile-brand"><img src="logo-emblema.png" alt=""><b>VISTORI</b></div>
+        <div><h2>Entrar</h2><p>Acesse com o e-mail cadastrado pela sua empresa.</p></div>
+        <div class="login-error" id="lerr" role="alert" aria-live="polite" hidden></div>
+        <form id="lf" class="login-form">
+          <label for="login-email">E-mail</label><input id="login-email" type="email" name="email" required autocomplete="username">
+          <label for="login-senha">Senha</label><input id="login-senha" type="password" name="senha" required autocomplete="current-password">
+          <div class="login-options"><label class="check-label"><input type="checkbox" checked> Manter conectado neste aparelho</label><a href="#" id="esqueci">Esqueci minha senha</a></div>
+          <button class="btn login-submit" id="loginBtn">Entrar</button>
+        </form>
+        <div class="login-network ${conectado ? '' : 'offline'}"><span></span><div><b>${conectado ? 'Conectado' : 'Sem conexão'}</b><small>Vistorias baixadas neste aparelho podem ser preenchidas offline e sincronizadas depois.</small></div></div>
+      </div>
+    </section>
+  </div>`;
   const erro = m => { const x = $('#lerr'); x.textContent = m; x.hidden = false; };
   $('#lf').onsubmit = async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = 'Entrando…';
     try { await F.signInWithEmailAndPassword(auth, fd.get('email').trim(), fd.get('senha')); }
-    catch (err) { erro(msgAuth(err)); }
+    catch (err) { erro(msgAuth(err)); btn.disabled = false; btn.textContent = 'Entrar'; }
   };
   $('#esqueci').onclick = async e => {
     e.preventDefault();
@@ -737,8 +805,10 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
+  const titles = { '': 'Visão geral', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
   const R = { '': inicio, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
