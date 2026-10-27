@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#ffffff">
 <title>VISTORI-ENGENHARIA</title>
+<script>try{var t=localStorage.getItem('vistori_tema')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,6 +15,30 @@
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <symbol id="i-operacoes" viewBox="0 0 24 24"><path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/><circle cx="12" cy="12" r="10"/></symbol>
+  <symbol id="i-comercial" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></symbol>
+  <symbol id="i-admin" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></symbol>
+  <symbol id="i-vistorias" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
+  <symbol id="i-checklist" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-clientes" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-imoveis" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-orcamentos" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-financeiro" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+  <symbol id="i-cadastros" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><path d="M10.3 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v3.3"/><path d="m21.7 19.4-.9-.3"/><path d="m15.2 16.9-.9-.3"/><path d="m16.6 21.7.3-.9"/><path d="m19.1 15.2.3-.9"/><path d="m19.6 21.7-.4-1"/><path d="m16.8 15.3-.4-1"/><path d="m14.3 19.6 1-.4"/><path d="m20.7 16.8 1-.4"/></symbol>
+  <symbol id="i-lgpd" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-usuarios" viewBox="0 0 24 24"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10 15H6a4 4 0 0 0-4 4v2"/><path d="m21.7 16.4-.9-.3"/><path d="m15.2 13.9-.9-.3"/><path d="m16.6 18.7.3-.9"/><path d="m19.1 12.2.3-.9"/><path d="m19.6 18.7-.4-1"/><path d="m16.8 12.3-.4-1"/><path d="m14.3 16.6 1-.4"/><path d="m20.7 13.8 1-.4"/></symbol>
+  <symbol id="i-backup" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 12a9 3 0 0 0 5 2.69"/><path d="M21 9.3V5"/><path d="M3 5v14a9 3 0 0 0 6.47 2.88"/><path d="M12 12v4h4"/><path d="M13 20a5 5 0 0 0 9-3 4.5 4.5 0 0 0-4.5-4.5c-1.33 0-2.54.54-3.41 1.41L12 16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+</svg>
 <div class="app-shell">
   <aside id="sidebar" class="sidebar noprint">
     <div class="sidebar-brand">
@@ -23,21 +48,64 @@
       </a>
       <small id="ver"></small>
     </div>
+    <button id="nav-search" class="nav-search" type="button" aria-label="Pesquisar módulos (Ctrl+K)" aria-haspopup="dialog">
+      <span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-search"></use></svg></span>
+      <span class="nav-label">Pesquisar…</span>
+      <kbd class="nav-kbd">Ctrl K</kbd>
+    </button>
     <nav id="nav" aria-label="Menu principal">
-      <a href="#/"><span class="nav-code">VG</span><span class="nav-label">Visão geral</span></a>
-      <a href="#/agenda"><span class="nav-code">AG</span><span class="nav-label">Agenda</span></a>
-      <a href="#/vistorias"><span class="nav-code">VI</span><span class="nav-label">Vistorias</span></a>
-      <a href="#/orcamentos"><span class="nav-code">OR</span><span class="nav-label">Orçamentos</span></a>
-      <a href="#/financeiro"><span class="nav-code">FI</span><span class="nav-label">Financeiro</span></a>
-      <a href="#/clientes"><span class="nav-code">CL</span><span class="nav-label">Clientes</span></a>
-      <a href="#/obras"><span class="nav-code">IO</span><span class="nav-label">Imóveis e obras</span></a>
-      <a href="#/cadastros"><span class="nav-code">CA</span><span class="nav-label">Cadastros</span></a>
-      <a href="#/checklist"><span class="nav-code">CK</span><span class="nav-label">Checklist</span></a>
-      <a href="#/lgpd"><span class="nav-code">LG</span><span class="nav-label">LGPD</span></a>
-      <a href="#/usuarios"><span class="nav-code">US</span><span class="nav-label">Usuários</span></a>
-      <a href="#/backup"><span class="nav-code">BK</span><span class="nav-label">Backup</span></a>
+      <div class="nav-group" data-group="operacoes">
+        <button class="nav-group-btn" type="button" aria-expanded="true" aria-controls="grp-operacoes">
+          <span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-operacoes"></use></svg></span>
+          <span class="nav-label">Operações</span>
+          <span class="nav-caret" aria-hidden="true"><svg class="ico"><use href="#i-caret"></use></svg></span>
+        </button>
+        <div class="nav-items" id="grp-operacoes">
+          <a href="#/" data-label="Visão geral"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-dashboard"></use></svg></span><span class="nav-label">Visão geral</span></a>
+          <a href="#/agenda" data-label="Agenda"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-calendar"></use></svg></span><span class="nav-label">Agenda</span></a>
+          <a href="#/vistorias" data-label="Vistorias"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-vistorias"></use></svg></span><span class="nav-label">Vistorias</span></a>
+          <a href="#/checklist" data-label="Checklist"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-checklist"></use></svg></span><span class="nav-label">Checklist</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="comercial">
+        <button class="nav-group-btn" type="button" aria-expanded="true" aria-controls="grp-comercial">
+          <span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-comercial"></use></svg></span>
+          <span class="nav-label">Comercial e Financeiro</span>
+          <span class="nav-caret" aria-hidden="true"><svg class="ico"><use href="#i-caret"></use></svg></span>
+        </button>
+        <div class="nav-items" id="grp-comercial">
+          <a href="#/clientes" data-label="Clientes"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-clientes"></use></svg></span><span class="nav-label">Clientes</span></a>
+          <a href="#/obras" data-label="Imóveis e obras"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-imoveis"></use></svg></span><span class="nav-label">Imóveis e obras</span></a>
+          <a href="#/orcamentos" data-label="Orçamentos"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-orcamentos"></use></svg></span><span class="nav-label">Orçamentos</span></a>
+          <a href="#/financeiro" data-label="Financeiro"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-financeiro"></use></svg></span><span class="nav-label">Financeiro</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="admin">
+        <button class="nav-group-btn" type="button" aria-expanded="true" aria-controls="grp-admin">
+          <span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-admin"></use></svg></span>
+          <span class="nav-label">Administração</span>
+          <span class="nav-caret" aria-hidden="true"><svg class="ico"><use href="#i-caret"></use></svg></span>
+        </button>
+        <div class="nav-items" id="grp-admin">
+          <a href="#/cadastros" data-label="Cadastros"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-cadastros"></use></svg></span><span class="nav-label">Cadastros</span></a>
+          <a href="#/lgpd" data-label="LGPD"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-lgpd"></use></svg></span><span class="nav-label">LGPD</span></a>
+          <a href="#/usuarios" data-label="Usuários"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-usuarios"></use></svg></span><span class="nav-label">Usuários</span></a>
+          <a href="#/backup" data-label="Backup"><span class="nav-ico" aria-hidden="true"><svg class="ico"><use href="#i-backup"></use></svg></span><span class="nav-label">Backup</span></a>
+        </div>
+      </div>
     </nav>
-    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Recolher menu">« <span>Recolher menu</span></button>
+    <div class="sidebar-foot">
+      <button id="theme-toggle" class="sidebar-toggle" type="button" aria-label="Alternar tema">
+        <span class="nav-ico theme-sun" aria-hidden="true"><svg class="ico"><use href="#i-sun"></use></svg></span>
+        <span class="nav-ico theme-moon" aria-hidden="true"><svg class="ico"><use href="#i-moon"></use></svg></span>
+        <span class="nav-label">Alternar tema</span>
+      </button>
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Recolher menu">
+        <span class="nav-ico sb-close" aria-hidden="true"><svg class="ico"><use href="#i-collapse"></use></svg></span>
+        <span class="nav-ico sb-open" aria-hidden="true"><svg class="ico"><use href="#i-expand"></use></svg></span>
+        <span class="nav-label">Recolher menu</span>
+      </button>
+    </div>
   </aside>
   <button id="nav-backdrop" class="nav-backdrop noprint" type="button" aria-label="Fechar menu"></button>
   <section class="app-frame">
@@ -56,6 +124,18 @@
     <footer>VISTORI-ENGENHARIA · SAN-CONECTA · <span id="ver2"></span></footer>
   </section>
 </div>
-<script type="module" src="app.js?v=0.8.0"></script>
+<div id="cmdk" class="cmdk" role="dialog" aria-modal="true" aria-label="Pesquisar módulos" hidden>
+  <div class="cmdk-backdrop" data-cmdk-close></div>
+  <div class="cmdk-panel">
+    <div class="cmdk-search">
+      <svg class="ico" aria-hidden="true"><use href="#i-search"></use></svg>
+      <input id="cmdk-input" type="text" placeholder="Ir para… (módulos, páginas)" autocomplete="off" aria-controls="cmdk-list" aria-expanded="true" aria-label="Pesquisar módulos">
+      <kbd>Esc</kbd>
+    </div>
+    <ul id="cmdk-list" class="cmdk-list" role="listbox" aria-label="Resultados"></ul>
+    <div class="cmdk-foot"><span>↑↓ navegar</span><span>↵ abrir</span><span>Esc fechar</span></div>
+  </div>
+</div>
+<script type="module" src="app.js?v=0.9.0"></script>
 </body>
 </html>

@@ -3,10 +3,14 @@
   .sidebar{width:min(294px,86vw);transform:translateX(-105%);box-shadow:0 12px 32px rgba(16,32,33,.18)}
   .sidebar.open{transform:translateX(0)}
   .sidebar-collapsed .sidebar{width:min(294px,86vw)}
-  .sidebar-collapsed .brand>span,.sidebar-collapsed .sidebar-brand small,.sidebar-collapsed .nav-label,.sidebar-collapsed .sidebar-toggle span{display:flex}
+  .sidebar-collapsed .brand>span,.sidebar-collapsed .sidebar-brand small{display:flex}
+  .sidebar-collapsed .nav-label{display:block}
+  .sidebar-collapsed .nav-kbd{display:inline}
+  .sidebar-collapsed .nav-group-btn{display:flex}
   .sidebar-collapsed .sidebar-brand{padding:0 14px}
-  .sidebar-collapsed #nav a{justify-content:flex-start;padding:0 10px}
-  .sidebar-collapsed .sidebar-toggle{font-size:14px}
+  .sidebar-collapsed .nav-search{justify-content:flex-start;padding:0 10px;margin:8px 10px 2px}
+  .sidebar-collapsed #nav a{justify-content:flex-start;padding:0 9px}
+  .sidebar-collapsed .sidebar-toggle{justify-content:flex-start;padding:0 10px;font-size:.82rem}
   .sidebar-collapsed .sidebar-toggle::after{content:none}
   body.nav-open{overflow:hidden}
   body.nav-open .nav-backdrop{display:block;position:fixed;inset:0;z-index:19;border:0;background:rgba(16,32,33,.48)}
@@ -62,6 +66,7 @@
   .client-head{align-items:flex-start}
   .client-head .btn{width:100%}
   .lgpd-kpis{grid-template-columns:1fr}
+  .cmdk{padding:8vh 10px 10px}
 }
 
 @media screen and (max-width:460px){
