@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.4.1';
+const VERSION = '0.4.2';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -434,9 +434,9 @@ async function novaVistoriaDaAgenda(agendamento) {
   const tp = ts.find(t => t.nome === agendamento.tipo);
   const pr = tp ? await get('precos', `${tp.id}|${obra.tipo}`) : null;
   const v = {
-    id: uid(), obraId: obra.id, tipo: agendamento.tipo, data: agendamento.data,
+    id: uid(), obraId: obra.id, tipo: agendamento.tipo, data: agendamento.data, hora: agendamento.hora || '',
     vistoriador: agendamento.responsavel || '', crea: '', artNumero: '', valor: pr ? pr.valor : '',
-    itens, status: 'rascunho', agendamentoId: agendamento.id, criado: new Date().toISOString()
+    orientacoes: agendamento.observacoes || '', itens, status: 'rascunho', agendamentoId: agendamento.id, criado: new Date().toISOString()
   };
   await put('vistorias', v);
   await put('agendamentos', { ...agendamento, vistoriaId: v.id, status: 'Em andamento', atualizado: new Date().toISOString() });
@@ -518,7 +518,7 @@ async function vistorias() {
     const obra = om[d.obraId];
     const tp = ts.find(t => t.nome === d.tipo);
     const pr = tp && obra ? await get('precos', `${tp.id}|${obra.tipo}`) : null;
-    const v = { id: uid(), obraId: d.obraId, tipo: d.tipo, data: new Date().toISOString().slice(0, 10), vistoriador: '', crea: '', artNumero: '', valor: pr ? pr.valor : '', itens, status: 'rascunho', criado: new Date().toISOString() };
+    const v = { id: uid(), obraId: d.obraId, tipo: d.tipo, data: new Date().toISOString().slice(0, 10), hora: '', vistoriador: '', crea: '', artNumero: '', valor: pr ? pr.valor : '', orientacoes: '', itens, status: 'rascunho', criado: new Date().toISOString() };
     await put('vistorias', v);
     location.hash = `#/vistoria/${v.id}`;
   };
@@ -555,10 +555,10 @@ async function vistoria(id) {
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
-  <p>${esc(cli?.nome)} · ${esc(v.tipo)} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
+  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
   ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}. <a href="#" data-reopen="1">Reabrir (apaga a assinatura)</a></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
-    <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'vistoriador', 'Engenheiro / Vistoriador')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}</div>
+    <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
     <div class="card">${itens || 'Checklist vazio. Edite em Checklist.'}</div>
     ${locked ? '' : `<div class="card"><h3>Finalizar e assinar</h3>
       <label>Nome do responsável</label><input id="signNome" value="${esc(v.vistoriador)}">
@@ -582,7 +582,8 @@ async function laudo(id) {
     <h1>Laudo de Vistoria — ${esc(v.tipo)}</h1>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br>
-    <b>Data:</b> ${esc(v.data)}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    <b>Data:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    ${v.orientacoes ? `<p><b>Orientações:</b> ${esc(v.orientacoes)}</p>` : ''}
     <p><b>Resumo:</b> ${v.itens.length} itens analisados, ${nc.length} não conforme(s).</p>
     ${v.itens.map(it => {
       const hd = it.cat !== last ? `<h3>${esc(it.cat)}</h3>` : ''; last = it.cat;
