@@ -273,6 +273,13 @@ td input[type=number]{min-width:96px}
 .docs li{padding:6px 0;border-bottom:1px solid var(--bd);font-size:.85rem}
 .docs li small{color:var(--subtle)}
 .docs li a{margin-left:10px}
+.audit{display:flex;flex-direction:column}
+.audit-item{display:grid;grid-template-columns:minmax(130px,180px) minmax(0,1fr) minmax(90px,160px);gap:10px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:.82rem}
+.audit-item:last-child{border-bottom:0}
+.audit-when{color:var(--subtle);font:.72rem 'IBM Plex Mono',monospace}
+.audit-what{color:var(--muted)}
+.audit-what b{color:var(--text)}
+.audit-who{color:var(--subtle);text-align:right;overflow:hidden;text-overflow:ellipsis}
 .orc-itens input{min-width:90px}
 .orc-itens td:first-child input{min-width:180px}
 .orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}
