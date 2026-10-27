@@ -151,6 +151,7 @@ td input[type=number]{min-width:96px}
 .dashboard-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .dashboard-actions .btn{margin:0}
 .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.lgpd-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .kpi-card{position:relative;min-width:0;min-height:160px;display:flex;flex-direction:column;padding:17px 17px 14px;border:1px solid var(--bd);border-radius:var(--radius);background:#fff;color:var(--text);text-decoration:none;box-shadow:var(--shadow);overflow:hidden}
 .kpi-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c)}
 .kpi-card.success::before{background:var(--ok)}
