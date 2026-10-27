@@ -6,8 +6,8 @@ const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 7);
+  const r = indexedDB.open('vistori', 8);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -397,7 +397,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'versoes', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -884,9 +884,15 @@ async function vistoria(id) {
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
   <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''}${v.numeroLaudo ? ' · ' + esc(v.numeroLaudo) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
-  ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}. <a href="#" data-reopen="1">Reabrir (apaga a assinatura)</a></div>` : ''}
+  ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}${v.versao ? ' · Versão ' + esc(v.versao) : ''}. <a href="#" data-reopen="1">Reabrir com justificativa</a></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
     <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
+    <div class="card"><h3>Texto do laudo</h3><div class="grid">
+      <div><label>Objetivo</label><textarea data-h="laudoObjetivo" placeholder="Objetivo do laudo…">${esc(v.laudoObjetivo)}</textarea></div>
+      <div><label>Metodologia</label><textarea data-h="laudoMetodologia" placeholder="Metodologia aplicada…">${esc(v.laudoMetodologia)}</textarea></div>
+      <div><label>Recomendações</label><textarea data-h="laudoRecomendacoes" placeholder="Recomendações técnicas…">${esc(v.laudoRecomendacoes)}</textarea></div>
+      <div><label>Conclusão</label><textarea data-h="laudoConclusao" placeholder="Conclusão…">${esc(v.laudoConclusao)}</textarea></div>
+    </div></div>
     <div class="card">${itens || 'Checklist vazio. Edite em Checklist.'}</div>
     ${locked ? '' : `<div class="card"><h3>Finalizar e assinar</h3>
       <label>Nome do responsável</label><input id="signNome" value="${esc(v.vistoriador)}">
@@ -903,27 +909,54 @@ async function laudo(id) {
   const [obra, fm] = await Promise.all([get('obras', v.obraId), fotosMap(v)]);
   const cli = obra ? await get('clientes', obra.clienteId) : null;
   const emp = (await get('config', 'empresa')) || {};
-  const nc = v.itens.filter(i => i.status === 'N');
-  let last = '';
+  const itens = v.itens || [];
+  const versoes = (await all('versoes')).filter(x => x.vistoriaId === v.id).sort((a, b) => (a.reabertoEm || '').localeCompare(b.reabertoEm || ''));
+  const nc = itens.filter(i => i.status === 'N');
+  const cats = [...new Set(itens.map(i => i.cat))];
+  const catStats = cats.map(cat => { const arr = itens.filter(i => i.cat === cat); return { cat, c: arr.filter(i => i.status === 'C').length, n: arr.filter(i => i.status === 'N').length, na: arr.filter(i => i.status === 'NA').length, ne: arr.filter(i => !i.status).length }; });
+  const objetivo = v.laudoObjetivo || 'Avaliar as condições de uso, manutenção e desempenho dos sistemas construtivos do imóvel, identificar anomalias e falhas e indicar as ações corretivas, com base nas diretrizes da ABNT NBR 16747 (Inspeção predial).';
+  const metodologia = v.laudoMetodologia || 'Inspeção visual dos sistemas acessíveis, com aplicação de checklist padronizado por sistema e ambiente, registro fotográfico e classificação das anomalias. Não foram realizados ensaios destrutivos.';
+  const recomendacoes = v.laudoRecomendacoes || (nc.length ? 'Corrigir as não conformidades apontadas, observando os prazos indicados e as recomendações técnicas de cada item.' : 'Manter o plano de manutenção preventiva e reavaliar os sistemas periodicamente.');
+  const conclusao = v.laudoConclusao || (nc.length ? `Foram identificadas ${nc.length} não conformidade(s) entre os ${itens.length} itens avaliados. Recomenda-se a execução das correções indicadas e nova inspeção após os reparos.` : `Foram avaliados ${itens.length} itens e não foram identificadas não conformidades.`);
+  const resumo = `Foram avaliados ${itens.length} itens em ${cats.length} sistema(s). ${nc.length ? `Foram identificadas ${nc.length} não conformidade(s), que requerem correção.` : 'Não foram identificadas não conformidades.'}`;
+  const fotoItens = itens.filter(i => (i.fotos || []).length);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(`Laudo ${v.numeroLaudo || v.id} | ${emp.razao || 'VISTORI ENGENHARIA'} | ${v.assinatura ? v.assinatura.hash : 'sem assinatura'}`)}`;
   app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/vistoria/${v.id}">Voltar à vistoria</a>${v.assinatura ? `<button class="btn ghost" id="verif" data-id="${v.id}">Verificar integridade</button>` : ''}</div>
+  ${!v.cienciaCliente ? `<div class="card noprint"><h3>Ciência do cliente</h3><p>Registre a ciência do cliente sobre este laudo.</p><div class="row"><input id="ciencia-nome" placeholder="Nome de quem tomou ciência"><button type="button" class="btn" id="ciencia-btn">Registrar ciência</button></div></div>` : ''}
   <div class="card laudo">
     <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
-    <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}</p>
-    <h1>Laudo de Vistoria — ${esc(v.tipo)}</h1>
-    <p class="laudo-num">${v.numeroLaudo ? 'Nº ' + esc(v.numeroLaudo) : 'Nº ainda não atribuído'}</p>
+    <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}${emp.cidade ? ' · ' + esc(emp.cidade) : ''}${emp.uf ? '/' + esc(emp.uf) : ''}</p>
+    <h1>Laudo Técnico — ${esc(v.tipo)}</h1>
+    <p class="laudo-num">${v.numeroLaudo ? 'Nº ' + esc(v.numeroLaudo) : 'Nº ainda não atribuído'}${v.versao ? ' · Versão ' + esc(v.versao) : ''}</p>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br>
-    <b>Data:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
-    ${v.orientacoes ? `<p><b>Orientações:</b> ${esc(v.orientacoes)}</p>` : ''}
-    <p><b>Resumo:</b> ${v.itens.length} itens analisados, ${nc.length} não conforme(s).</p>
-    ${v.itens.map(it => {
-      const hd = it.cat !== last ? `<h3>${esc(it.cat)}</h3>` : ''; last = it.cat;
-      return `${hd}<div class="item"><b>${esc(it.desc)}</b> — <span class="st-${it.status}">${ST[it.status]}</span>${it.obs ? `<br>${esc(it.obs)}` : ''}
-      <div class="fotos">${it.fotos.map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div></div>`;
-    }).join('')}
-    ${v.assinatura ? `<h3>Assinatura</h3><img src="${v.assinatura.img}" alt="assinatura" style="max-width:300px;border-bottom:1px solid #000"><br>
-    ${esc(v.assinatura.nome)} — ${fmt(v.assinatura.ts)}<br><small>Integridade (SHA-256):</small><div class="hash">${v.assinatura.hash}</div>` : ''}
+    <b>Data da vistoria:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    <h2>1. Objetivo</h2><p>${esc(objetivo)}</p>
+    <h2>2. Metodologia</h2><p>${esc(metodologia)}</p>
+    <h2>3. Resumo executivo</h2><p>${esc(resumo)}</p>
+    ${v.orientacoes ? `<p><b>Orientações / observações:</b> ${esc(v.orientacoes)}</p>` : ''}
+    <h2>4. Itens avaliados</h2>
+    <table><thead><tr><th>Sistema</th><th>Conforme</th><th>Não conforme</th><th>N/A</th><th>Não avaliado</th></tr></thead><tbody>
+    ${catStats.map(x => `<tr><td>${esc(x.cat)}</td><td>${x.c}</td><td>${x.n}</td><td>${x.na}</td><td>${x.ne}</td></tr>`).join('')}
+    </tbody></table>
+    <h2>5. Não conformidades</h2>
+    ${nc.length ? nc.map(it => `<div class="item"><h4>${esc(it.desc)} <small>(${esc(it.cat)})</small></h4>${it.obs ? `<p>${esc(it.obs)}</p>` : ''}<div class="fotos">${(it.fotos || []).map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div></div>`).join('') : '<p>Nenhuma não conformidade registrada.</p>'}
+    <h2>6. Registro fotográfico</h2>
+    ${fotoItens.length ? fotoItens.map(it => `<h4>${esc(it.desc)}</h4><div class="fotos">${(it.fotos || []).map(f => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><small>${esc(f.legenda)}</small></div>`).join('')}</div>`).join('') : '<p>Sem registro fotográfico.</p>'}
+    <h2>7. Recomendações</h2><p>${esc(recomendacoes)}</p>
+    <h2>8. Conclusão</h2><p>${esc(conclusao)}</p>
+    ${v.cienciaCliente ? `<h3>Ciência do cliente</h3><p>${esc(v.cienciaCliente.nome)} — ${fmt(v.cienciaCliente.em)}</p>` : ''}
+    ${v.assinatura ? `<h3>Responsável técnico</h3><img src="${v.assinatura.img}" alt="assinatura" style="max-width:300px;border-bottom:1px solid #000"><br>${esc(v.assinatura.nome)} — ${fmt(v.assinatura.ts)}<br><small>Integridade (SHA-256):</small><div class="hash">${v.assinatura.hash}</div>` : ''}
+    <div class="laudo-qr"><img src="${qrUrl}" alt="QR code de verificação"><small>Verificação: ${esc((v.assinatura?.hash || 'sem assinatura').slice(0, 24))}</small></div>
+    ${versoes.length ? `<h3>Histórico de versões</h3><ul class="versoes">${versoes.map(x => `<li>Versão ${x.versao} — reaberta em ${fmt(x.reabertoEm)} — ${esc(x.justificativa)}</li>`).join('')}</ul>` : ''}
   </div>`;
+  const cb = $('#ciencia-btn');
+  if (cb) cb.onclick = async () => {
+    const nome = $('#ciencia-nome').value.trim();
+    if (!nome) return alert('Informe o nome de quem tomou ciência.');
+    await put('vistorias', { ...v, cienciaCliente: { nome, em: new Date().toISOString() } });
+    laudo(v.id);
+  };
 }
 
 /* ---------- checklist e backup ---------- */
@@ -1319,7 +1352,15 @@ document.addEventListener('click', async e => {
     if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); render(); }
   } else if (d.reopen) {
     e.preventDefault();
-    delete curV.assinatura; curV.status = 'rascunho'; await put('vistorias', curV); vistoria(curV.id);
+    const just = prompt('Justificativa para reabrir o laudo (mínimo 10 caracteres):');
+    if (just === null) return;
+    if (just.trim().length < 10) return alert('Justificativa muito curta (mín. 10 caracteres).');
+    if (curV.assinatura) await put('versoes', { id: uid(), vistoriaId: curV.id, numeroLaudo: curV.numeroLaudo || '', versao: curV.versao || 1, assinatura: curV.assinatura, reabertoEm: new Date().toISOString(), justificativa: just.trim(), criado: new Date().toISOString() });
+    delete curV.assinatura;
+    curV.status = 'rascunho';
+    curV.versao = (curV.versao || 1) + 1;
+    await put('vistorias', curV);
+    vistoria(curV.id);
   } else if (a.id === 'clr') { pad.clear(); }
   else if (a.id === 'sair') { e.preventDefault(); await F.signOut(auth); }
   else if (a.id === 'migrar') {
@@ -1344,6 +1385,7 @@ document.addEventListener('click', async e => {
     const hash = await calcHash(curV, ts);
     curV.assinatura = { nome, img: $('#sig').toDataURL('image/png'), ts, hash, fotosSha: await fotosSha(curV) };
     if (!curV.numeroLaudo) curV.numeroLaudo = await proximoNumeroLaudo();
+    curV.versao = curV.versao || 1;
     curV.status = 'assinada';
     await put('vistorias', curV);
     location.hash = `#/laudo/${curV.id}`;

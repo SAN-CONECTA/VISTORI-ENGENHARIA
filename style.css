@@ -244,6 +244,15 @@ td input[type=number]{min-width:96px}
 .recibo-ass small{color:var(--subtle);font-size:.72rem;letter-spacing:.08em}
 .doc-empresa{color:var(--subtle);font-size:.8rem;margin:-4px 0 12px}
 .laudo-num{color:var(--muted);font:.8rem 'IBM Plex Mono',monospace;margin:-6px 0 12px}
+.laudo h2{font-size:1.05rem;margin:22px 0 6px;color:var(--c-dark);border-bottom:1px solid var(--bd);padding-bottom:4px}
+.laudo h3{font-size:.95rem;margin:16px 0 6px}
+.laudo table{width:100%;border-collapse:collapse;margin:8px 0}
+.laudo table th,.laudo table td{border-bottom:1px solid var(--bd);padding:6px 8px;text-align:left}
+.laudo-qr{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-top:18px}
+.laudo-qr img{width:120px;height:120px}
+.laudo-qr small{color:var(--subtle);font-size:.66rem;max-width:260px;text-align:right;word-break:break-all}
+.versoes{list-style:none;padding:0;margin:6px 0}
+.versoes li{padding:6px 0;border-bottom:1px solid var(--bd);font-size:.82rem;color:var(--muted)}
 .orc-itens input{min-width:90px}
 .orc-itens td:first-child input{min-width:180px}
 .orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}
