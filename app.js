@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -1191,12 +1191,12 @@ const sidebarToggle = $('#sidebar-toggle');
 const themeToggle = $('#theme-toggle');
 const navSearch = $('#nav-search');
 
-const temaInicial = localStorage.getItem('vistori_tema') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const temaInicial = localStorage.getItem('vistori_tema_v2') || 'light';
 document.documentElement.dataset.theme = temaInicial;
 if (themeToggle) themeToggle.addEventListener('click', () => {
   const novo = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = novo;
-  localStorage.setItem('vistori_tema', novo);
+  localStorage.setItem('vistori_tema_v2', novo);
 });
 
 document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('vistori_menu_recolhido') === '1');
