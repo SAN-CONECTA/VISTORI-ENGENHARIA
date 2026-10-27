@@ -13,6 +13,12 @@
   .nav-toggle{display:block}
   .topbar{padding:0 16px}
   main{padding:24px 20px}
+  .login-layout{grid-template-columns:1fr}
+  .login-showcase{display:none}
+  .login-panel{min-height:100vh}
+  .login-mobile-brand{display:flex;margin-bottom:8px}
+  .login-mobile-brand img{width:34px;height:34px;object-fit:contain}
+  .login-mobile-brand b{color:var(--c-dark);letter-spacing:.08em}
 }
 
 @media screen and (max-width:700px){
@@ -55,6 +61,9 @@
   .grid{grid-template-columns:1fr}
   .fotos{grid-template-columns:1fr}
   #sig{height:140px}
+  .login-panel{padding:24px 18px}
+  .login-form-wrap{gap:16px}
+  .login-options{align-items:flex-start}
 }
 
 @media (prefers-reduced-motion:reduce){

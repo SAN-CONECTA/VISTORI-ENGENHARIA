@@ -102,10 +102,42 @@ tbody tr:hover{background:#fafcfc}
 .hubcard b{color:var(--c-dark)}
 .hubcard .stat{margin:.2rem 0}
 td input[type=number]{min-width:96px}
-.login{max-width:420px;margin:2rem auto;text-align:center}
-.login img{width:160px;height:auto}
-.login form{text-align:left}
-.login .btn{width:100%;margin-bottom:.6rem}
+.login-layout{width:100%;min-height:100vh;display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,1fr);background:var(--bg)}
+.login-showcase{min-height:100vh;padding:48px;display:flex;flex-direction:column;justify-content:space-between;gap:32px;background:#1e5c5f;color:#fff}
+.login-brand,.login-mobile-brand{display:flex;align-items:center;gap:12px}
+.login-brand img{width:36px;height:36px;object-fit:contain;filter:drop-shadow(0 0 0 white)}
+.login-brand>span{display:flex;flex-direction:column;line-height:1}
+.login-brand b{font-size:1.08rem;letter-spacing:.1em}
+.login-brand i{font:500 .62rem 'IBM Plex Mono',monospace;letter-spacing:.28em;color:#bfd6d6;margin-top:5px}
+.login-copy{max-width:520px}
+.login-copy h1{margin:0;font-size:clamp(2rem,3.2vw,2.75rem);line-height:1.13;font-weight:600;letter-spacing:-.015em}
+.login-copy p{margin:18px 0 0;max-width:500px;color:#d3e3e3;font-size:1.02rem}
+.login-feature{max-width:520px;display:flex;align-items:center;gap:14px;padding:18px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:rgba(255,255,255,.05)}
+.login-feature>span{width:42px;height:42px;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid rgba(255,255,255,.3);border-radius:8px;font:600 .8rem 'IBM Plex Mono',monospace;color:#e9d3ae}
+.login-feature div{display:flex;flex-direction:column;gap:3px}
+.login-feature small{color:#bfd6d6}
+.login-version{font:400 .72rem 'IBM Plex Mono',monospace;color:#9fc2c2}
+.login-panel{display:flex;padding:32px 24px}
+.login-form-wrap{width:100%;max-width:430px;margin:auto;display:flex;flex-direction:column;gap:20px}
+.login-mobile-brand{display:none}
+.login-form-wrap h2{margin:0 0 5px;font-size:1.75rem;font-weight:600}
+.login-form-wrap p{margin:0;color:var(--muted)}
+.login-form{display:flex;flex-direction:column}
+.login-form label:not(.check-label){margin-top:0;font-weight:600;color:var(--text)}
+.login-form input{margin-bottom:16px}
+.login-options{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.login-options .check-label{min-height:44px;display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-weight:400}
+.login-options input{width:20px;height:20px;min-height:0;margin:0;accent-color:var(--c)}
+.login-options a{font-weight:600;text-decoration:none}
+.login-submit{width:100%;min-height:52px;margin-top:4px}
+.login-submit:disabled{background:#a9bdbe;cursor:wait}
+.login-error{padding:12px 14px;border-radius:8px;background:var(--bad-bg);color:#8f1c13;border:1px solid #f2c4be}
+.login-network{display:flex;gap:12px;padding:14px;border-radius:10px;background:#fff;border:1px solid var(--bd)}
+.login-network>span{width:10px;height:10px;border-radius:50%;background:#3fb47a;margin-top:6px;flex:none}
+.login-network.offline>span{background:#e0a23b}
+.login-network div{display:flex;flex-direction:column;color:var(--muted)}
+.login-network b{color:var(--text)}
+.login-network small{font-size:.8rem}
 .hero{text-align:center}
 .hero img{max-width:260px;width:60%;height:auto}
 .hero p{margin:.3rem 0 0;color:var(--subtle)}
