@@ -989,6 +989,12 @@ async function financeiro(q) {
   const receb = soma(recs.filter(r => r.status === 'Recebido'));
   const aberto = soma(recs.filter(r => r.status !== 'Recebido'));
   const atras = soma(recs.filter(r => recStatus(r) === 'Atrasado'));
+  const baseF = new Date(); baseF.setHours(0, 0, 0, 0);
+  const mesesF = [];
+  for (let k = 5; k >= 0; k--) { const d = new Date(baseF.getFullYear(), baseF.getMonth() - k, 1); mesesF.push({ y: d.getFullYear(), m: d.getMonth(), label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') }); }
+  const prevF = mesesF.map(x => recs.filter(r => { const d = r.vencimento ? new Date(r.vencimento + 'T12:00:00') : new Date(r.criado || 0); return d.getFullYear() === x.y && d.getMonth() === x.m; }).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const recF = mesesF.map(x => recs.filter(r => r.status === 'Recebido' && r.pagoEm && new Date(r.pagoEm).getFullYear() === x.y && new Date(r.pagoEm).getMonth() === x.m).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const maxF = Math.max(1, ...prevF, ...recF);
   const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || ''}`]);
   app.innerHTML = `<section class="section-heading client-head"><div><h2>Financeiro</h2><p>Receitas previstas, recebidas e contas a receber.</p></div>
     <div class="dashboard-actions"><a class="btn" href="#/financeiro?nova=1">+ Novo recebimento</a><button type="button" class="btn ghost" id="fin-gerar">Gerar de orçamentos/vistorias</button></div></section>
@@ -1005,11 +1011,16 @@ async function financeiro(q) {
     <div class="kpi-card"><span>Em aberto</span><strong>${brl(aberto)}</strong><small>${recs.filter(r => r.status !== 'Recebido').length} lançamento(s)</small></div>
     <div class="kpi-card danger"><span>Atrasado</span><strong>${brl(atras)}</strong><small>Vencidos e não recebidos</small></div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-heading"><div><h3>Receita prevista × recebida</h3><p>Últimos 6 meses.</p></div></div>
+    <div class="chart" role="img" aria-label="Receita prevista e recebida por mês">${mesesF.map((x, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(prevF[i] / maxF * 100)}%" title="Prevista ${brl(prevF[i])}"></span><span class="bar alt" style="height:${Math.round(recF[i] / maxF * 100)}%" title="Recebida ${brl(recF[i])}"></span></div><small>${x.label}</small></div>`).join('')}</div>
+    <div class="chart-legend"><span><i class="lg-prev"></i>Prevista</span><span><i class="lg-rec"></i>Recebida</span></div>
+  </div>
   <div class="card">
     <div class="list-filters">
       <input id="f-busca" placeholder="Buscar descrição, cliente ou imóvel…">
       <select id="f-status"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Recebido">Recebido</option><option value="Atrasado">Atrasado</option></select>
-      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option></select>
+      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option><option value="12">Últimos 12 meses</option></select>
     </div>
     <table><thead><tr><th>Descrição</th><th>Cliente/Imóvel</th><th>Origem</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="f-tbody">
     ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
@@ -1059,6 +1070,7 @@ async function financeiro(q) {
         if (!v) ok = false;
         else if (per === 'mes' && v.slice(0, 7) !== mes) ok = false;
         else if (per === 'ano' && Number(v.slice(0, 4)) !== ano) ok = false;
+        else if (per === '12') { const lim = new Date(hoje); lim.setMonth(lim.getMonth() - 12); if (new Date(v + 'T12:00:00') < lim) ok = false; }
       }
       r.hidden = !ok;
     });
