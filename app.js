@@ -506,6 +506,16 @@ async function inicio() {
 /* ---------- agenda ---------- */
 const dataBR = data => data ? new Date(data + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 
+async function proximoNumeroLaudo() {
+  const cfg = (await get('config', 'numeracao')) || {};
+  const ano = new Date().getFullYear();
+  let proximo = Number(cfg.proximo) || 1;
+  if (Number(cfg.ano) !== ano) proximo = 1;
+  const numero = `${(cfg.prefixo || 'VST').trim()}-${ano}-${String(proximo).padStart(4, '0')}`;
+  await put('config', { id: 'numeracao', prefixo: (cfg.prefixo || 'VST').trim(), proximo: proximo + 1, ano });
+  return numero;
+}
+
 async function novaVistoriaDaAgenda(agendamento) {
   const [obra, ts] = await Promise.all([get('obras', agendamento.obraId), getTipos()]);
   if (!obra) throw new Error('O imóvel/obra deste agendamento não foi encontrado.');
@@ -873,7 +883,7 @@ async function vistoria(id) {
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
-  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
+  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''}${v.numeroLaudo ? ' · ' + esc(v.numeroLaudo) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
   ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}. <a href="#" data-reopen="1">Reabrir (apaga a assinatura)</a></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
     <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
@@ -900,6 +910,7 @@ async function laudo(id) {
     <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
     <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}</p>
     <h1>Laudo de Vistoria — ${esc(v.tipo)}</h1>
+    <p class="laudo-num">${v.numeroLaudo ? 'Nº ' + esc(v.numeroLaudo) : 'Nº ainda não atribuído'}</p>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br>
     <b>Data:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
@@ -1332,6 +1343,7 @@ document.addEventListener('click', async e => {
     const ts = new Date().toISOString();
     const hash = await calcHash(curV, ts);
     curV.assinatura = { nome, img: $('#sig').toDataURL('image/png'), ts, hash, fotosSha: await fotosSha(curV) };
+    if (!curV.numeroLaudo) curV.numeroLaudo = await proximoNumeroLaudo();
     curV.status = 'assinada';
     await put('vistorias', curV);
     location.hash = `#/laudo/${curV.id}`;
