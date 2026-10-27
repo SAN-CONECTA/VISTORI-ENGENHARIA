@@ -32,6 +32,7 @@
   .syncbox{padding:0 9px;font-size:0}
   .syncbox::after{content:'OK';font-size:.7rem}
   .syncbox.offline::after{content:'Offline'}
+  .syncbox.local::after{content:'Local'}
   .offline-banner{padding:9px 14px}
   main{padding:18px 14px}
   main>h2:first-child{font-size:1.3rem}
