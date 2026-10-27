@@ -1,13 +1,13 @@
 'use strict';
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 3);
+  const r = indexedDB.open('vistori', 4);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -360,7 +360,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'agendamentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -379,7 +379,7 @@ async function migrarLocal(prog) {
 
 /* ---------- início ---------- */
 async function inicio() {
-  const [c, o, v] = await Promise.all([all('clientes'), all('obras'), all('vistorias')]);
+  const [c, o, v, ag] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos')]);
   const om = Object.fromEntries(o.map(x => [x.id, x]));
   const agora = new Date();
   const saudacao = agora.getHours() < 12 ? 'Bom dia' : agora.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
@@ -389,16 +389,19 @@ async function inicio() {
   const naoConformes = v.reduce((n, x) => n + (x.itens || []).filter(i => i.status === 'N').length, 0);
   const semAvaliacao = v.reduce((n, x) => n + (x.itens || []).filter(i => !i.status).length, 0);
   const recentes = [...v].sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).slice(0, 5);
+  const hoje = agora.toISOString().slice(0, 10);
+  const visitasHoje = ag.filter(x => x.data === hoje && x.status !== 'Cancelada');
   const aviso = MODO === 'local'
     ? '<div class="warn"><b>Modo local (teste):</b> os dados ficam somente neste aparelho/navegador.</div>'
     : '<div class="ok">Dados na nuvem (Firebase). Funciona offline: o que você salvar sem internet sobe sozinho quando a conexão voltar.</div>';
   const kpi = (href, titulo, valor, detalhe, tone = '') => `<a class="kpi-card ${tone}" href="${href}"><span>${titulo}</span><strong>${valor}</strong><small>${detalhe}</small><i>Ver detalhes →</i></a>`;
   app.innerHTML = `<section class="dashboard-heading">
     <div><h2>${saudacao}</h2><p>${dataExtenso.charAt(0).toUpperCase() + dataExtenso.slice(1)}</p></div>
-    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
+    <div class="dashboard-actions"><a class="btn" href="#/vistorias">+ Nova vistoria</a><a class="btn ghost" href="#/agenda?nova=1">Agendar visita</a><a class="btn ghost" href="#/clientes">Novo cliente</a><a class="btn ghost" href="#/obras">Novo imóvel</a></div>
   </section>
   ${aviso}${await bannerMigracao()}
   <section class="kpi-grid" aria-label="Resumo operacional">
+    ${kpi('#/agenda', 'Visitas de hoje', visitasHoje.length, visitasHoje.length ? visitasHoje.map(x => x.hora).filter(Boolean).join(' e ') : 'Nenhuma visita agendada')}
     ${kpi('#/vistorias', 'Vistorias em andamento', emAndamento.length, emAndamento.length ? 'Registros que ainda podem ser editados' : 'Nenhuma vistoria pendente')}
     ${kpi('#/vistorias', 'Laudos assinados', assinadas.length, assinadas.length ? 'Documentos finalizados' : 'Nenhum laudo assinado', 'success')}
     ${kpi('#/clientes', 'Clientes', c.length, `${o.length} imóvel(is) ou obra(s) vinculados`)}
@@ -417,6 +420,78 @@ async function inicio() {
       <a href="#/backup"><span>Exportar cópia de segurança</span><b>→</b></a>
     </aside>
   </section>`;
+}
+
+/* ---------- agenda ---------- */
+const dataBR = data => data ? new Date(data + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+
+async function novaVistoriaDaAgenda(agendamento) {
+  const [obra, ts] = await Promise.all([get('obras', agendamento.obraId), getTipos()]);
+  if (!obra) throw new Error('O imóvel/obra deste agendamento não foi encontrado.');
+  const chk = await getCheck();
+  const itens = [];
+  for (const [cat, arr] of Object.entries(chk)) for (const desc of arr) itens.push({ cat, desc, status: '', obs: '', fotos: [] });
+  const tp = ts.find(t => t.nome === agendamento.tipo);
+  const pr = tp ? await get('precos', `${tp.id}|${obra.tipo}`) : null;
+  const v = {
+    id: uid(), obraId: obra.id, tipo: agendamento.tipo, data: agendamento.data,
+    vistoriador: agendamento.responsavel || '', crea: '', artNumero: '', valor: pr ? pr.valor : '',
+    itens, status: 'rascunho', agendamentoId: agendamento.id, criado: new Date().toISOString()
+  };
+  await put('vistorias', v);
+  await put('agendamentos', { ...agendamento, vistoriaId: v.id, status: 'Em andamento', atualizado: new Date().toISOString() });
+  return v;
+}
+
+async function agenda(q) {
+  const [ags, os, cls, ts] = await Promise.all([all('agendamentos'), all('obras'), all('clientes'), getTipos()]);
+  const om = Object.fromEntries(os.map(o => [o.id, o]));
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const qp = new URLSearchParams(q || '');
+  const cur = ags.find(x => x.id === qp.get('e')) || {};
+  const mostrarForm = qp.has('nova') || !!cur.id;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const status = ['Agendada', 'Confirmada', 'Em andamento', 'Concluída', 'Cancelada'];
+  const ordenados = [...ags].sort((a, b) => `${a.data || ''} ${a.hora || ''}`.localeCompare(`${b.data || ''} ${b.hora || ''}`));
+  const opcaoObra = os.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || 'Cliente não informado'}`]);
+  app.innerHTML = `<section class="section-heading agenda-title"><div><h2>Agenda</h2><p>Organize visitas e inicie a vistoria usando os dados do agendamento.</p></div>
+    <a class="btn" href="#/agenda?nova=1">+ Agendar visita</a></section>
+  ${mostrarForm ? `<form id="agenda-form" class="card grid">
+    ${fieldHtml({ k: 'data', l: 'Data', type: 'date', req: 1 }, cur.data || hoje)}
+    ${fieldHtml({ k: 'hora', l: 'Horário', type: 'time', req: 1 }, cur.hora || '')}
+    ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', opts: opcaoObra, req: 1 }, cur.obraId || '')}
+    ${fieldHtml({ k: 'tipo', l: 'Tipo de serviço', opts: ts.map(t => [t.nome, t.nome]), req: 1 }, cur.tipo || '')}
+    ${fieldHtml({ k: 'responsavel', l: 'Responsável técnico' }, cur.responsavel || '')}
+    ${fieldHtml({ k: 'status', l: 'Status', opts: status.map(x => [x, x]), req: 1 }, cur.status || 'Agendada')}
+    ${fieldHtml({ k: 'observacoes', l: 'Observações', type: 'textarea' }, cur.observacoes || '')}
+    <div class="row agenda-form-actions"><button class="btn">${cur.id ? 'Salvar alterações' : 'Agendar visita'}</button><a class="btn ghost" href="#/agenda">Cancelar</a></div>
+  </form>` : ''}
+  ${!os.length ? '<div class="warn">Cadastre um cliente e um imóvel/obra antes de criar um agendamento.</div>' : ''}
+  <div class="card agenda-list">
+    <div class="agenda-filters"><input id="agenda-busca" placeholder="Buscar cliente, imóvel, serviço ou responsável…"><select id="agenda-status"><option value="">Todos os status</option>${status.map(x => `<option>${x}</option>`).join('')}</select></div>
+    <table><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Serviço</th><th>Responsável</th><th>Status</th><th></th></tr></thead><tbody id="agenda-tbody">
+    ${ordenados.map(x => { const obra = om[x.obraId]; return `<tr data-status="${esc(x.status)}"><td><b>${dataBR(x.data)}</b><br><small>${esc(x.hora)}</small></td><td>${esc(obra?.nome || 'Não encontrado')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(x.tipo)}</td><td>${esc(x.responsavel || '—')}</td><td><span class="status-badge agenda-${esc((x.status || '').toLowerCase().replace(/\s+/g, '-'))}">${esc(x.status)}</span></td><td class="act"><a href="#/agenda?e=${encodeURIComponent(x.id)}">Editar</a>${x.vistoriaId ? `<a href="#/vistoria/${encodeURIComponent(x.vistoriaId)}">Abrir vistoria</a>` : x.status !== 'Cancelada' ? `<a href="#" data-agenda-iniciar="${esc(x.id)}">Iniciar vistoria</a>` : ''}<a href="#" data-del="agendamentos:${esc(x.id)}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhuma visita agendada.</td></tr>'}
+    </tbody></table>
+  </div>`;
+
+  const filtrar = () => {
+    const texto = ($('#agenda-busca')?.value || '').toLowerCase();
+    const st = $('#agenda-status')?.value || '';
+    document.querySelectorAll('#agenda-tbody tr').forEach(row => {
+      if (row.querySelector('[colspan]')) return;
+      row.hidden = !!((texto && !row.textContent.toLowerCase().includes(texto)) || (st && row.dataset.status !== st));
+    });
+  };
+  $('#agenda-busca').oninput = filtrar;
+  $('#agenda-status').onchange = filtrar;
+  const form = $('#agenda-form');
+  if (form) form.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(form));
+    await put('agendamentos', { ...cur, ...d, id: cur.id || uid(), criado: cur.criado || new Date().toISOString(), atualizado: new Date().toISOString() });
+    location.hash = '#/agenda';
+    render();
+  };
 }
 
 /* ---------- vistorias ---------- */
@@ -615,6 +690,15 @@ document.addEventListener('click', async e => {
     if (f.id) await del('fotos', f.id);
     curV.itens[i].fotos.splice(j, 1); await put('vistorias', curV);
     const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+  } else if (d.agendaIniciar) {
+    e.preventDefault();
+    const agendamento = await get('agendamentos', d.agendaIniciar);
+    if (!agendamento) return alert('Agendamento não encontrado.');
+    if (agendamento.vistoriaId) { location.hash = `#/vistoria/${agendamento.vistoriaId}`; return; }
+    try {
+      const v = await novaVistoriaDaAgenda(agendamento);
+      location.hash = `#/vistoria/${v.id}`;
+    } catch (err) { alert(err.message); }
   } else if (d.reopen) {
     e.preventDefault();
     delete curV.assinatura; curV.status = 'rascunho'; await put('vistorias', curV); vistoria(curV.id);
@@ -807,10 +891,10 @@ async function render() {
   const [r, arg] = path.split('/');
   const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', checklist: 'Checklist padrão', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
