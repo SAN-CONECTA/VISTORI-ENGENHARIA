@@ -1,13 +1,13 @@
 'use strict';
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
@@ -31,7 +31,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 5);
+  const r = indexedDB.open('vistori', 6);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -397,7 +397,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'agendamentos', 'orcamentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -921,6 +921,101 @@ async function lgpd() {
   });
 }
 
+/* ---------- financeiro ---------- */
+const recStatus = r => r.status === 'Recebido' ? 'Recebido' : (r.vencimento && r.vencimento < new Date().toISOString().slice(0, 10) ? 'Atrasado' : 'Pendente');
+
+async function financeiro(q) {
+  const [recs, cls, obras] = await Promise.all([all('recebimentos'), all('clientes'), all('obras')]);
+  const om = Object.fromEntries(obras.map(o => [o.id, o]));
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const qp = new URLSearchParams(q || '');
+  const mostrarForm = qp.has('nova');
+  const soma = arr => arr.reduce((n, r) => n + (Number(r.valor) || 0), 0);
+  const prev = soma(recs);
+  const receb = soma(recs.filter(r => r.status === 'Recebido'));
+  const aberto = soma(recs.filter(r => r.status !== 'Recebido'));
+  const atras = soma(recs.filter(r => recStatus(r) === 'Atrasado'));
+  const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || ''}`]);
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Financeiro</h2><p>Receitas previstas, recebidas e contas a receber.</p></div>
+    <div class="dashboard-actions"><a class="btn" href="#/financeiro?nova=1">+ Novo recebimento</a><button type="button" class="btn ghost" id="fin-gerar">Gerar de orçamentos/vistorias</button></div></section>
+  ${mostrarForm ? `<form id="fin-form" class="card grid">
+    ${fieldHtml({ k: 'descricao', l: 'Descrição', req: 1 }, '')}
+    ${fieldHtml({ k: 'obraId', l: 'Imóvel/Obra', opts: opObra }, '')}
+    ${fieldHtml({ k: 'valor', l: 'Valor (R$)', req: 1, type: 'number' }, '')}
+    ${fieldHtml({ k: 'vencimento', l: 'Vencimento', type: 'date' }, '')}
+    <div class="row"><button class="btn">Adicionar recebimento</button><a class="btn ghost" href="#/financeiro">Cancelar</a></div>
+  </form>` : ''}
+  <div class="kpi-grid">
+    <div class="kpi-card"><span>Previsto</span><strong>${brl(prev)}</strong><small>Todos os recebimentos</small></div>
+    <div class="kpi-card success"><span>Recebido</span><strong>${brl(receb)}</strong><small>${recs.filter(r => r.status === 'Recebido').length} lançamento(s)</small></div>
+    <div class="kpi-card"><span>Em aberto</span><strong>${brl(aberto)}</strong><small>${recs.filter(r => r.status !== 'Recebido').length} lançamento(s)</small></div>
+    <div class="kpi-card danger"><span>Atrasado</span><strong>${brl(atras)}</strong><small>Vencidos e não recebidos</small></div>
+  </div>
+  <div class="card">
+    <div class="list-filters">
+      <input id="f-busca" placeholder="Buscar descrição, cliente ou imóvel…">
+      <select id="f-status"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Recebido">Recebido</option><option value="Atrasado">Atrasado</option></select>
+      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option></select>
+    </div>
+    <table><thead><tr><th>Descrição</th><th>Cliente/Imóvel</th><th>Origem</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="f-tbody">
+    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
+    <tr id="f-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
+    </tbody></table>
+  </div>`;
+  const form = $('#fin-form');
+  if (form) form.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(form));
+    await put('recebimentos', { id: uid(), origem: 'manual', origemId: '', descricao: d.descricao, obraId: d.obraId || '', clienteId: om[d.obraId]?.clienteId || '', valor: d.valor, vencimento: d.vencimento || '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+    location.hash = '#/financeiro'; render();
+  };
+
+  const g = $('#fin-gerar');
+  if (g) g.onclick = async () => {
+    const [orcs, vs, atuais] = await Promise.all([all('orcamentos'), all('vistorias'), all('recebimentos')]);
+    const exist = new Set(atuais.map(r => r.origem + ':' + r.origemId));
+    let n = 0;
+    for (const o of orcs.filter(o => o.status === 'Aprovado')) {
+      if (exist.has('orcamento:' + o.id)) continue;
+      const t = orcTotais(o);
+      await put('recebimentos', { id: uid(), origem: 'orcamento', origemId: o.id, descricao: ('Proposta ' + (o.numero || '')).trim(), obraId: o.obraId || '', clienteId: o.clienteId || '', valor: t.tot, vencimento: '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+      exist.add('orcamento:' + o.id); n++;
+    }
+    for (const v of vs.filter(v => Number(v.valor) > 0)) {
+      if (exist.has('vistoria:' + v.id)) continue;
+      await put('recebimentos', { id: uid(), origem: 'vistoria', origemId: v.id, descricao: ('Vistoria ' + (v.tipo || '')).trim(), obraId: v.obraId || '', clienteId: om[v.obraId]?.clienteId || '', valor: Number(v.valor), vencimento: v.data || '', status: 'Pendente', pagoEm: '', criado: new Date().toISOString() });
+      exist.add('vistoria:' + v.id); n++;
+    }
+    alert(n ? `${n} recebimento(s) gerado(s).` : 'Nada novo para gerar.');
+    render();
+  };
+
+  const filtrar = () => {
+    const texto = ($('#f-busca')?.value || '').toLowerCase().trim();
+    const st = $('#f-status')?.value || '';
+    const per = $('#f-periodo')?.value || '';
+    const hoje = new Date(); const mes = hoje.toISOString().slice(0, 7); const ano = hoje.getFullYear();
+    const rows = [...document.querySelectorAll('#f-tbody tr[data-status]')];
+    rows.forEach(r => {
+      let ok = true;
+      if (texto && !r.textContent.toLowerCase().includes(texto)) ok = false;
+      if (st && r.dataset.status !== st) ok = false;
+      if (per) {
+        const v = r.dataset.venc || '';
+        if (!v) ok = false;
+        else if (per === 'mes' && v.slice(0, 7) !== mes) ok = false;
+        else if (per === 'ano' && Number(v.slice(0, 4)) !== ano) ok = false;
+      }
+      r.hidden = !ok;
+    });
+    const vis = rows.filter(r => !r.hidden).length;
+    const vazio = $('#f-vazio'); if (vazio) vazio.hidden = !(rows.length > 0 && vis === 0);
+  };
+  const b = $('#f-busca'); if (b) b.oninput = filtrar;
+  const s = $('#f-status'); if (s) s.onchange = filtrar;
+  const p = $('#f-periodo'); if (p) p.onchange = filtrar;
+}
+
 /* ---------- eventos globais ---------- */
 app.addEventListener('change', async e => {
   const t = e.target;
@@ -995,6 +1090,14 @@ document.addEventListener('click', async e => {
     if (!o) return;
     await put('orcamentos', { ...o, status: d.orcStatus, atualizado: new Date().toISOString() });
     render();
+  } else if (d.receber) {
+    e.preventDefault();
+    const r = await get('recebimentos', d.receber);
+    if (r) { await put('recebimentos', { ...r, status: 'Recebido', pagoEm: new Date().toISOString() }); render(); }
+  } else if (d.reabrir) {
+    e.preventDefault();
+    const r = await get('recebimentos', d.reabrir);
+    if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); render(); }
   } else if (d.reopen) {
     e.preventDefault();
     delete curV.assinatura; curV.status = 'rascunho'; await put('vistorias', curV); vistoria(curV.id);
@@ -1187,10 +1290,10 @@ async function render() {
   const [r, arg] = path.split('/');
   const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), checklist, lgpd, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
