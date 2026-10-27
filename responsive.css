@@ -19,6 +19,8 @@
   .login-mobile-brand{display:flex;margin-bottom:8px}
   .login-mobile-brand img{width:34px;height:34px;object-fit:contain}
   .login-mobile-brand b{color:var(--c-dark);letter-spacing:.08em}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-grid{grid-template-columns:1fr}
 }
 
 @media screen and (max-width:700px){
@@ -49,6 +51,9 @@
   .laudo-logo{max-height:72px;height:auto}
   .hero img{width:min(80%,230px)}
   .login{margin:.5rem auto}
+  .dashboard-heading{flex-direction:column}
+  .dashboard-actions{width:100%;justify-content:flex-start}
+  .dashboard-actions .btn{flex:1 1 auto}
 }
 
 @media screen and (max-width:460px){
@@ -61,6 +66,9 @@
   .grid{grid-template-columns:1fr}
   .fotos{grid-template-columns:1fr}
   #sig{height:140px}
+  .kpi-grid{grid-template-columns:1fr}
+  .kpi-card{min-height:145px}
+  .dashboard-actions .btn{flex:1 1 100%}
   .login-panel{padding:24px 18px}
   .login-form-wrap{gap:16px}
   .login-options{align-items:flex-start}
