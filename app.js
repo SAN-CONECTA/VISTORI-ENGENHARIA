@@ -6,14 +6,17 @@ const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
   || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
-const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
-const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
+const STORES = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'acessos', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
+const STORES_DADOS = ['clientes', 'obras', 'vistorias', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'catalogo', 'precos'];
 const TIPOS_DEFAULT = ['Particular', 'Indicação', 'Judicial', 'Avaliação bancária', 'Vistoria de entrega', 'Inspeção predial'];
 const TIPOS_OBRA = ['Residencial', 'Comercial', 'Obra particular', 'Obra corporativa'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 const UNIDADES = ['un', 'h', 'm²', 'km', 'visita'];
 const GRAV = ['Baixa', 'Média', 'Alta', 'Crítica'];
 const PRAZOS = ['Imediato', '15 dias', '30 dias', '60 dias', '90 dias'];
+const DOC_TIPOS = ['ART', 'Planta', 'Contrato', 'Proposta', 'Foto', 'Outro'];
+const lerArquivo = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
+const fmtBytes = n => !n ? '—' : n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
 const CAD = ['cadastros', 'clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos'];
 const ST = { '': '— avaliar —', C: 'Conforme', N: 'Não conforme', NA: 'N/A' };
 const DEFAULT_CHECK = {
@@ -33,7 +36,7 @@ const brl = v => (v === '' || v == null || isNaN(v)) ? '—' : Number(v).toLocal
 
 /* ---------- Armazenamento local (IndexedDB v3) ---------- */
 const openDB = () => new Promise((res, rej) => {
-  const r = indexedDB.open('vistori', 9);
+  const r = indexedDB.open('vistori', 10);
   r.onupgradeneeded = () => STORES.forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: 'id' }); });
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -399,7 +402,7 @@ async function bannerMigracao() {
 async function migrarLocal(prog) {
   let n = 0;
   const passo = () => { n++; if (prog && n % 5 === 0) prog(n); };
-  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
+  for (const s of ['clientes', 'obras', 'versoes', 'anomalias', 'documentos', 'agendamentos', 'orcamentos', 'recebimentos', 'fornecedores', 'tipos', 'catalogo', 'precos', 'config']) for (const x of await L.all(s)) { await B.put(s, x, true); passo(); }
   for (const f of await L.all('fotos')) { await B.put('fotos', f, true); passo(); }
   for (const v of await L.all('vistorias')) {
     for (const it of v.itens || []) {
@@ -908,6 +911,7 @@ async function vistoria(id) {
   const [obra, fm] = await Promise.all([get('obras', v.obraId), fotosMap(v)]);
   const cli = obra ? await get('clientes', obra.clienteId) : null;
   const anomalias = (await all('anomalias')).filter(a => a.vistoriaId === v.id).sort((a, b) => (a.criado || '').localeCompare(b.criado || ''));
+  const docsV = (await all('documentos')).filter(d => d.vistoriaId === v.id);
   const locked = v.status === 'assinada';
   let last = '';
   const itens = v.itens.map((it, i) => {
@@ -950,6 +954,15 @@ async function vistoria(id) {
     <div class="anom-list">
       ${anomalias.length ? anomalias.map(a => `<div class="anom"><div class="anom-head"><b>${esc(a.titulo)}</b><span class="grav grav-${esc((a.gravidade || '').toLowerCase())}">${esc(a.gravidade)}</span></div>${a.descricao ? `<p>${esc(a.descricao)}</p>` : ''}<div class="anom-meta"><span><b>Local:</b> ${esc(a.ambiente || '—')}</span><span><b>Prazo:</b> ${esc(a.prazo || '—')}</span><span><b>Responsável:</b> ${esc(a.responsavel || '—')}</span></div>${a.foto ? `<img class="anom-foto" src="${a.foto}" alt="">` : ''}<div class="row"><select data-anom-status="${a.id}">${['Aberta', 'Em correção', 'Corrigida'].map(s => `<option ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><a href="#" data-del="anomalias:${a.id}">Excluir</a></div></div>`).join('') : '<p>Nenhuma anomalia registrada.</p>'}
     </div>
+  </div>
+  <div class="card"><div class="section-heading"><div><h3>Documentos</h3><p>ART, plantas e contratos vinculados.</p></div></div>
+    ${locked ? '' : `<form id="vdoc-form" class="grid">
+      ${fieldHtml({ k: 'tipo', l: 'Tipo', req: 1, opts: DOC_TIPOS.map(t => [t, t]) }, 'ART')}
+      ${fieldHtml({ k: 'nome', l: 'Nome', req: 1 }, '')}
+      <div><label>Arquivo</label><input type="file" id="vdoc-file"></div>
+      <div class="row" style="grid-column:1/-1"><button class="btn">Anexar</button></div>
+    </form>`}
+    ${docsV.length ? `<ul class="docs">${docsV.map(d => `<li><b>${esc(d.tipo)}</b> · ${esc(d.nome)} <small>${fmtBytes(d.tamanho)}</small> <a href="#" data-download="${d.id}">baixar</a>${locked ? '' : `<a href="#" data-del="documentos:${d.id}">excluir</a>`}</li>`).join('')}</ul>` : '<p>Nenhum documento anexado.</p>'}
   </div>`;
   const c = $('#sig'); if (c) pad = sigPad(c);
   const af = $('#anom-form');
@@ -960,6 +973,17 @@ async function vistoria(id) {
     const file = $('#anom-foto')?.files[0];
     if (file) foto = await comprimir(file);
     await put('anomalias', { id: uid(), vistoriaId: v.id, titulo: d.titulo, gravidade: d.gravidade || 'Média', ambiente: d.ambiente || '', descricao: d.descricao || '', prazo: d.prazo || '', responsavel: d.responsavel || '', status: 'Aberta', foto, criado: new Date().toISOString() });
+    vistoria(v.id);
+  };
+  const vf = $('#vdoc-form');
+  if (vf) vf.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(vf));
+    const file = $('#vdoc-file')?.files[0];
+    if (!file) return alert('Selecione um arquivo.');
+    const src = file.type.startsWith('image/') ? await comprimir(file) : await lerArquivo(file);
+    if (src.length > 750000) return alert('Arquivo muito grande para o armazenamento atual (limite ~700 KB).');
+    await put('documentos', { id: uid(), nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: '', obraId: obra?.id || '', vistoriaId: v.id, criado: new Date().toISOString() });
     vistoria(v.id);
   };
 }
@@ -975,6 +999,7 @@ async function laudo(id) {
   const versoes = (await all('versoes')).filter(x => x.vistoriaId === v.id).sort((a, b) => (a.reabertoEm || '').localeCompare(b.reabertoEm || ''));
   const nc = itens.filter(i => i.status === 'N');
   const anomalias = (await all('anomalias')).filter(a => a.vistoriaId === v.id);
+  const docs = (await all('documentos')).filter(d => d.vistoriaId === v.id);
   const cats = [...new Set(itens.map(i => i.cat))];
   const catStats = cats.map(cat => { const arr = itens.filter(i => i.cat === cat); return { cat, c: arr.filter(i => i.status === 'C').length, n: arr.filter(i => i.status === 'N').length, na: arr.filter(i => i.status === 'NA').length, ne: arr.filter(i => !i.status).length }; });
   const objetivo = v.laudoObjetivo || 'Avaliar as condições de uso, manutenção e desempenho dos sistemas construtivos do imóvel, identificar anomalias e falhas e indicar as ações corretivas, com base nas diretrizes da ABNT NBR 16747 (Inspeção predial).';
@@ -1010,6 +1035,7 @@ async function laudo(id) {
     <h2>8. Conclusão</h2><p>${esc(conclusao)}</p>
     ${v.cienciaCliente ? `<h3>Ciência do cliente</h3><p>${esc(v.cienciaCliente.nome)} — ${fmt(v.cienciaCliente.em)}</p>` : ''}
     ${v.assinatura ? `<h3>Responsável técnico</h3><img src="${v.assinatura.img}" alt="assinatura" style="max-width:300px;border-bottom:1px solid #000"><br>${esc(v.assinatura.nome)} — ${fmt(v.assinatura.ts)}<br><small>Integridade (SHA-256):</small><div class="hash">${v.assinatura.hash}</div>` : ''}
+    ${docs.length ? `<h3>Documentos anexados</h3><ul class="docs">${docs.map(d => `<li><b>${esc(d.tipo)}</b> · ${esc(d.nome)}</li>`).join('')}</ul>` : ''}
     <div class="laudo-qr"><img src="${qrUrl}" alt="QR code de verificação"><small>Verificação: ${esc((v.assinatura?.hash || 'sem assinatura').slice(0, 24))}</small></div>
     ${versoes.length ? `<h3>Histórico de versões</h3><ul class="versoes">${versoes.map(x => `<li>Versão ${x.versao} — reaberta em ${fmt(x.reabertoEm)} — ${esc(x.justificativa)}</li>`).join('')}</ul>` : ''}
   </div>`;
@@ -1277,6 +1303,51 @@ async function usuarios() {
   };
 }
 
+/* ---------- documentos ---------- */
+async function documentos() {
+  const [docs, obras, cls, vs] = await Promise.all([all('documentos'), all('obras'), all('clientes'), all('vistorias')]);
+  const om = Object.fromEntries(obras.map(o => [o.id, o]));
+  const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
+  const vm = Object.fromEntries(vs.map(v => [v.id, v]));
+  const vinculo = d => d.vistoriaId ? `Vistoria ${vm[d.vistoriaId]?.numeroLaudo || ''}`.trim() : d.obraId ? `${om[d.obraId]?.nome || 'Obra'}${om[d.obraId]?.clienteId ? ' — ' + (cm[om[d.obraId].clienteId] || '') : ''}` : '—';
+  const opVinc = [...obras.map(o => [`obra:${o.id}`, `${o.nome} — ${cm[o.clienteId] || ''}`]), ...vs.map(v => [`vistoria:${v.id}`, `Vistoria ${v.numeroLaudo || v.tipo || ''} — ${om[v.obraId]?.nome || ''}`])];
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Documentos</h2><p>ARTs, plantas, contratos e arquivos vinculados.</p></div></section>
+  <form id="doc-form" class="card grid">
+    ${fieldHtml({ k: 'tipo', l: 'Tipo', req: 1, opts: DOC_TIPOS.map(t => [t, t]) }, 'Outro')}
+    ${fieldHtml({ k: 'nome', l: 'Nome do documento', req: 1 }, '')}
+    ${fieldHtml({ k: 'vinculo', l: 'Vincular a', opts: opVinc }, '')}
+    ${fieldHtml({ k: 'descricao', l: 'Descrição' }, '')}
+    <div><label>Arquivo</label><input type="file" id="doc-file"></div>
+    <p style="grid-column:1/-1;color:var(--subtle);font-size:.78rem">Limite atual: ~700 KB por arquivo (armazenamento no Firestore). Imagens são comprimidas automaticamente.</p>
+    <div class="row" style="grid-column:1/-1"><button class="btn">Enviar documento</button></div>
+  </form>
+  <div class="card">
+    <div class="list-filters"><input id="d-busca" placeholder="Buscar nome ou descrição…"><select id="d-tipo"><option value="">Todos os tipos</option>${DOC_TIPOS.map(t => `<option>${t}</option>`).join('')}</select></div>
+    <table><thead><tr><th>Nome</th><th>Tipo</th><th>Vínculo</th><th>Tamanho</th><th>Data</th><th></th></tr></thead><tbody id="d-tbody">
+    ${docs.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(d => `<tr data-tipo="${esc(d.tipo)}"><td>${esc(d.nome)}</td><td>${esc(d.tipo)}</td><td>${esc(vinculo(d))}</td><td>${fmtBytes(d.tamanho)}</td><td>${d.criado ? new Date(d.criado).toLocaleDateString('pt-BR') : '—'}</td><td class="act"><a href="#" data-download="${d.id}">Baixar</a><a href="#" data-del="documentos:${d.id}">Excluir</a></td></tr>`).join('') || '<tr><td colspan="6">Nenhum documento cadastrado.</td></tr>'}
+    </tbody></table>
+  </div>`;
+  const f = $('#doc-form');
+  if (f) f.onsubmit = async e => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(f));
+    const file = $('#doc-file')?.files[0];
+    if (!file) return alert('Selecione um arquivo.');
+    const src = file.type.startsWith('image/') ? await comprimir(file) : await lerArquivo(file);
+    if (src.length > 750000) return alert('Arquivo muito grande para o armazenamento atual (limite ~700 KB).');
+    const [tipoV, idV] = (d.vinculo || '').split(':');
+    await put('documentos', { id: uid(), nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: d.descricao || '', obraId: tipoV === 'obra' ? idV : '', vistoriaId: tipoV === 'vistoria' ? idV : '', criado: new Date().toISOString() });
+    render();
+  };
+  const filtrar = () => {
+    const t = ($('#d-busca')?.value || '').toLowerCase().trim();
+    const tp = $('#d-tipo')?.value || '';
+    document.querySelectorAll('#d-tbody tr[data-tipo]').forEach(r => { r.hidden = !!((t && !r.textContent.toLowerCase().includes(t)) || (tp && r.dataset.tipo !== tp)); });
+  };
+  const b = $('#d-busca'); if (b) b.oninput = filtrar;
+  const st = $('#d-tipo'); if (st) st.onchange = filtrar;
+}
+
 /* ---------- configurações ---------- */
 async function configuracoes() {
   const [emp, num] = await Promise.all([get('config', 'empresa'), get('config', 'numeracao')]);
@@ -1427,6 +1498,12 @@ document.addEventListener('click', async e => {
     e.preventDefault();
     const r = await get('recebimentos', d.reabrir);
     if (r) { await put('recebimentos', { ...r, status: 'Pendente', pagoEm: '' }); render(); }
+  } else if (d.download) {
+    e.preventDefault();
+    const arq = await get('documentos', d.download);
+    if (!arq) return;
+    const link = document.createElement('a'); link.href = arq.src; link.download = arq.nome || 'documento';
+    document.body.appendChild(link); link.click(); link.remove();
   } else if (d.reopen) {
     e.preventDefault();
     const just = prompt('Justificativa para reabrir o laudo (mínimo 10 caracteres):');
@@ -1736,10 +1813,10 @@ async function render() {
     g.classList.toggle('has-active', ativo);
     if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
   });
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', documentos: 'Documentos', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, lgpd, usuarios, configuracoes, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, documentos, lgpd, usuarios, configuracoes, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
