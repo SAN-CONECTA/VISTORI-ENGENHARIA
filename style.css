@@ -183,6 +183,10 @@ td input[type=number]{min-width:96px}
 .agenda-form-actions{align-self:end}
 .agenda-filters{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,240px);gap:10px;margin-bottom:14px}
 .agenda-filters input,.agenda-filters select{min-height:44px}
+.list-filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.list-filters input{flex:1 1 240px}
+.list-filters select{flex:0 1 180px}
+.list-filters input,.list-filters select{min-height:44px}
 .status-badge.agenda-agendada{background:var(--c-light);color:var(--c-dark)}
 .status-badge.agenda-confirmada{background:var(--info-bg);color:var(--info)}
 .status-badge.agenda-em-andamento{background:var(--warn-bg);color:var(--warn)}
