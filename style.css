@@ -209,6 +209,39 @@ td input[type=number]{min-width:96px}
 .timeline a{font-weight:600;font-size:.86rem;text-decoration:none;color:var(--text)}
 .timeline small{color:var(--subtle);font-size:.76rem}
 .timeline em{color:var(--subtle);font-style:normal;font-size:.7rem;margin-top:2px}
+.chart{display:flex;align-items:flex-end;gap:10px;padding:6px 2px 0}
+.chart-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px}
+.chart-col .bars{height:140px;width:100%;display:flex;align-items:flex-end;justify-content:center;gap:4px}
+.chart-col .bar{width:60%;max-width:34px;min-height:2px;border-radius:6px 6px 0 0;background:var(--c);transition:height .3s ease}
+.chart-col .bar.alt{background:var(--gold)}
+.chart-col b{font:600 .72rem 'IBM Plex Mono',monospace;color:var(--muted)}
+.chart-col small{color:var(--subtle);font-size:.66rem;white-space:nowrap}
+.chart-legend{display:flex;gap:14px;margin-top:10px;font-size:.74rem;color:var(--subtle)}
+.chart-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.chart-legend .lg-prev{background:var(--c)}
+.chart-legend .lg-rec{background:var(--gold)}
+.calendar-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.calendar-head b{flex:1;text-align:center;text-transform:capitalize;font-size:.95rem}
+.calendar-head .btn{margin:0}
+.calendar-wrap{overflow-x:auto}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;min-width:660px}
+.cal-dow{text-align:center;font:600 .66rem 'IBM Plex Mono',monospace;color:var(--subtle);text-transform:uppercase;padding:4px 0}
+.cal-day{min-height:96px;border:1px solid var(--bd);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:3px;background:var(--surface);overflow:hidden}
+.cal-day.out{opacity:.42}
+.cal-day.today{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.cal-num{font:600 .72rem 'IBM Plex Mono',monospace;color:var(--muted);text-decoration:none}
+.cal-day.today .cal-num{color:var(--c-dark)}
+.cal-ev{display:block;font-size:.64rem;line-height:1.25;padding:2px 4px;border-radius:4px;text-decoration:none;background:var(--c-light);color:var(--c-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-ev.st-confirmada{background:var(--info-bg);color:var(--info)}
+.cal-ev.st-em-andamento{background:var(--warn-bg);color:var(--warn)}
+.cal-ev.st-concluída{background:var(--ok-bg);color:var(--ok)}
+.cal-ev.st-cancelada{background:var(--bad-bg);color:var(--bad)}
+.cal-more{color:var(--subtle);font-size:.6rem}
+.recibo-num{display:flex;flex-wrap:wrap;gap:18px;color:var(--muted);margin:10px 0 0}
+.recibo-corpo{font-size:1.05rem;line-height:1.75;margin:26px 0}
+.recibo-ass{margin-top:64px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.recibo-ass span{width:280px;max-width:80%;border-top:1px solid var(--text)}
+.recibo-ass small{color:var(--subtle);font-size:.72rem;letter-spacing:.08em}
 .orc-itens input{min-width:90px}
 .orc-itens td:first-child input{min-width:180px}
 .orc-totais{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin:12px 0}

@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.9.1';
+const VERSION = '0.10.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -416,7 +416,7 @@ async function migrarLocal(prog) {
 
 /* ---------- início ---------- */
 async function inicio() {
-  const [c, o, v, ag] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos')]);
+  const [c, o, v, ag, recs] = await Promise.all([all('clientes'), all('obras'), all('vistorias'), all('agendamentos'), all('recebimentos')]);
   const om = Object.fromEntries(o.map(x => [x.id, x]));
   const cm = Object.fromEntries(c.map(x => [x.id, x.nome]));
   const agora = new Date();
@@ -434,6 +434,16 @@ async function inicio() {
   for (const x of v) { atividades.push({ ts: x.criado, tipo: 'vistoria', v: x }); if (x.assinatura?.ts) atividades.push({ ts: x.assinatura.ts, tipo: 'laudo', v: x }); }
   for (const x of ag) atividades.push({ ts: x.criado, tipo: 'agenda', a: x });
   const ultimas = atividades.filter(e => e.ts).sort((a, b) => (b.ts || '').localeCompare(a.ts || '')).slice(0, 6);
+  const base = new Date(); base.setHours(0, 0, 0, 0);
+  const semanas = [];
+  for (let k = 4; k >= 0; k--) { const fim = new Date(base); fim.setDate(fim.getDate() - k * 7); fim.setHours(23, 59, 59, 999); const ini = new Date(fim); ini.setDate(ini.getDate() - 6); ini.setHours(0, 0, 0, 0); semanas.push({ ini, fim, label: ini.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }); }
+  const vSem = semanas.map(s => v.filter(x => { const d = x.data ? new Date(x.data + 'T12:00:00') : new Date(x.criado || 0); return d >= s.ini && d <= s.fim; }).length);
+  const meses = [];
+  for (let k = 5; k >= 0; k--) { const d = new Date(base.getFullYear(), base.getMonth() - k, 1); meses.push({ y: d.getFullYear(), m: d.getMonth(), label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') }); }
+  const prevMes = meses.map(x => recs.filter(r => { const d = r.vencimento ? new Date(r.vencimento + 'T12:00:00') : new Date(r.criado || 0); return d.getFullYear() === x.y && d.getMonth() === x.m; }).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const recMes = meses.map(x => recs.filter(r => r.status === 'Recebido' && r.pagoEm && new Date(r.pagoEm).getFullYear() === x.y && new Date(r.pagoEm).getMonth() === x.m).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const maxV = Math.max(1, ...vSem);
+  const maxR = Math.max(1, ...prevMes, ...recMes);
   const statusClass = s => 'agenda-' + String(s || '').toLowerCase().replace(/\s+/g, '-');
   const evt = e => {
     if (e.tipo === 'agenda') { const o = om[e.a.obraId]; return { icon: 'AG', txt: 'Visita agendada', sub: `${o?.nome || 'Imóvel não encontrado'} · ${dataBR(e.a.data)} ${e.a.hora || ''}`.trim(), href: `#/agenda?e=${e.a.id}` }; }
@@ -479,6 +489,17 @@ async function inicio() {
       <div class="section-heading"><div><h3>Atividades recentes</h3><p>Últimos movimentos no sistema.</p></div></div>
       ${ultimas.length ? `<ol class="timeline">${ultimas.map(e => { const d = evt(e); return `<li><span class="tl-code">${d.icon}</span><div><a href="${d.href}">${esc(d.txt)}</a><small>${esc(d.sub)}</small><em>${fmt(e.ts)}</em></div></li>`; }).join('')}</ol>` : '<p>Nenhuma atividade registrada ainda.</p>'}
     </aside>
+  </section>
+  <section class="dashboard-grid">
+    <div class="card">
+      <div class="section-heading"><div><h3>Vistorias por semana</h3><p>Últimas 5 semanas.</p></div><a href="#/vistorias">Ver vistorias →</a></div>
+      <div class="chart" role="img" aria-label="Vistorias por semana">${semanas.map((s, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(vSem[i] / maxV * 100)}%" title="${vSem[i]} vistoria(s)"></span></div><b>${vSem[i]}</b><small>${s.label}</small></div>`).join('')}</div>
+    </div>
+    <aside class="card">
+      <div class="section-heading"><div><h3>Receita prevista × recebida</h3><p>Últimos 6 meses.</p></div><a href="#/financeiro">Ver financeiro →</a></div>
+      <div class="chart" role="img" aria-label="Receita prevista e recebida por mês">${meses.map((x, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(prevMes[i] / maxR * 100)}%" title="Prevista ${brl(prevMes[i])}"></span><span class="bar alt" style="height:${Math.round(recMes[i] / maxR * 100)}%" title="Recebida ${brl(recMes[i])}"></span></div><small>${x.label}</small></div>`).join('')}</div>
+      <div class="chart-legend"><span><i class="lg-prev"></i>Prevista</span><span><i class="lg-rec"></i>Recebida</span></div>
+    </aside>
   </section>`;
 }
 
@@ -514,6 +535,21 @@ async function agenda(q) {
   const status = ['Agendada', 'Confirmada', 'Em andamento', 'Concluída', 'Cancelada'];
   const ordenados = [...ags].sort((a, b) => `${a.data || ''} ${a.hora || ''}`.localeCompare(`${b.data || ''} ${b.hora || ''}`));
   const opcaoObra = os.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || 'Cliente não informado'}`]);
+  const verCal = qp.get('v') === 'cal';
+  const profs = [...new Set(ags.map(a => a.responsavel).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const profSel = qp.get('prof') || '';
+  const mesAtual = qp.get('mes') || hoje.slice(0, 7);
+  const [anoMes, mmMes] = mesAtual.split('-').map(Number);
+  const primeiroDia = new Date(anoMes, mmMes - 1, 1);
+  const inicioGrid = new Date(primeiroDia); inicioGrid.setDate(1 - primeiroDia.getDay());
+  const diasCal = [];
+  for (let i = 0; i < 42; i++) { const d = new Date(inicioGrid); d.setDate(inicioGrid.getDate() + i); diasCal.push(d); }
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const nomeMes = primeiroDia.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const prevMes = (() => { const d = new Date(anoMes, mmMes - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+  const nextMes = (() => { const d = new Date(anoMes, mmMes, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })();
+  const linkCal = (mes, prof) => `#/agenda?v=cal&mes=${mes}${prof ? '&prof=' + encodeURIComponent(prof) : ''}`;
+  const opProf = `<option value="">Todos os profissionais</option>${profs.map(p => `<option value="${esc(p)}" ${p === profSel ? 'selected' : ''}>${esc(p)}</option>`).join('')}`;
   app.innerHTML = `<section class="section-heading agenda-title"><div><h2>Agenda</h2><p>Organize visitas e inicie a vistoria usando os dados do agendamento.</p></div>
     <a class="btn" href="#/agenda?nova=1">+ Agendar visita</a></section>
   ${mostrarForm ? `<form id="agenda-form" class="card grid">
@@ -527,23 +563,41 @@ async function agenda(q) {
     <div class="row agenda-form-actions"><button class="btn">${cur.id ? 'Salvar alterações' : 'Agendar visita'}</button><a class="btn ghost" href="#/agenda">Cancelar</a></div>
   </form>` : ''}
   ${!os.length ? '<div class="warn">Cadastre um cliente e um imóvel/obra antes de criar um agendamento.</div>' : ''}
-  <div class="card agenda-list">
-    <div class="agenda-filters"><input id="agenda-busca" placeholder="Buscar cliente, imóvel, serviço ou responsável…"><select id="agenda-status"><option value="">Todos os status</option>${status.map(x => `<option>${x}</option>`).join('')}</select></div>
+  ${verCal ? `<div class="card">
+    <div class="calendar-head">
+      <a class="btn ghost" href="${linkCal(prevMes, profSel)}" aria-label="Mês anterior">‹</a>
+      <b>${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}</b>
+      <a class="btn ghost" href="${linkCal(nextMes, profSel)}" aria-label="Próximo mês">›</a>
+      <a class="btn ghost" href="#/agenda${profSel ? '?prof=' + encodeURIComponent(profSel) : ''}">Ver lista</a>
+    </div>
+    <div class="list-filters"><select id="agenda-prof">${opProf}</select></div>
+    <div class="calendar-wrap"><div class="calendar-grid">
+      ${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
+      ${diasCal.map(d => { const k = ymd(d); const evs = ags.filter(a => a.data === k && (!profSel || a.responsavel === profSel)); const outro = d.getMonth() !== mmMes - 1; return `<div class="cal-day ${outro ? 'out' : ''} ${k === hoje ? 'today' : ''}"><a class="cal-num" href="#/agenda?nova=1&data=${k}" title="Agendar em ${dataBR(k)}">${d.getDate()}</a>${evs.slice(0, 3).map(e => `<a class="cal-ev st-${esc((e.status || '').toLowerCase().replace(/\s+/g, '-'))}" href="#/agenda?e=${encodeURIComponent(e.id)}" title="${esc(e.hora || '')} ${esc(e.tipo || '')}">${esc(e.hora || '')} ${esc(om[e.obraId]?.nome || '')}</a>`).join('')}${evs.length > 3 ? `<small class="cal-more">+${evs.length - 3}</small>` : ''}</div>`; }).join('')}
+    </div></div>
+  </div>` : `<div class="card agenda-list">
+    <div class="list-filters"><input id="agenda-busca" placeholder="Buscar cliente, imóvel, serviço ou responsável…"><select id="agenda-status"><option value="">Todos os status</option>${status.map(x => `<option>${x}</option>`).join('')}</select><select id="agenda-prof">${opProf}</select><a class="btn ghost" href="${linkCal(mesAtual, profSel)}">Calendário</a></div>
     <table><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Serviço</th><th>Responsável</th><th>Status</th><th></th></tr></thead><tbody id="agenda-tbody">
-    ${ordenados.map(x => { const obra = om[x.obraId]; return `<tr data-status="${esc(x.status)}"><td><b>${dataBR(x.data)}</b><br><small>${esc(x.hora)}</small></td><td>${esc(obra?.nome || 'Não encontrado')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(x.tipo)}</td><td>${esc(x.responsavel || '—')}</td><td><span class="status-badge agenda-${esc((x.status || '').toLowerCase().replace(/\s+/g, '-'))}">${esc(x.status)}</span></td><td class="act"><a href="#/agenda?e=${encodeURIComponent(x.id)}">Editar</a>${x.vistoriaId ? `<a href="#/vistoria/${encodeURIComponent(x.vistoriaId)}">Abrir vistoria</a>` : x.status !== 'Cancelada' ? `<a href="#" data-agenda-iniciar="${esc(x.id)}">Iniciar vistoria</a>` : ''}<a href="#" data-del="agendamentos:${esc(x.id)}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhuma visita agendada.</td></tr>'}
+    ${ordenados.map(x => { const obra = om[x.obraId]; return `<tr data-status="${esc(x.status)}" data-resp="${esc(x.responsavel || '')}"><td><b>${dataBR(x.data)}</b><br><small>${esc(x.hora)}</small></td><td>${esc(obra?.nome || 'Não encontrado')}<br><small>${esc(cm[obra?.clienteId] || '')}</small></td><td>${esc(x.tipo)}</td><td>${esc(x.responsavel || '—')}</td><td><span class="status-badge agenda-${esc((x.status || '').toLowerCase().replace(/\s+/g, '-'))}">${esc(x.status)}</span></td><td class="act"><a href="#/agenda?e=${encodeURIComponent(x.id)}">Editar</a>${x.vistoriaId ? `<a href="#/vistoria/${encodeURIComponent(x.vistoriaId)}">Abrir vistoria</a>` : x.status !== 'Cancelada' ? `<a href="#" data-agenda-iniciar="${esc(x.id)}">Iniciar vistoria</a>` : ''}<a href="#" data-del="agendamentos:${esc(x.id)}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="6">Nenhuma visita agendada.</td></tr>'}
     </tbody></table>
-  </div>`;
+  </div>`}`;
 
   const filtrar = () => {
     const texto = ($('#agenda-busca')?.value || '').toLowerCase();
     const st = $('#agenda-status')?.value || '';
+    const prof = $('#agenda-prof')?.value || '';
     document.querySelectorAll('#agenda-tbody tr').forEach(row => {
       if (row.querySelector('[colspan]')) return;
-      row.hidden = !!((texto && !row.textContent.toLowerCase().includes(texto)) || (st && row.dataset.status !== st));
+      row.hidden = !!((texto && !row.textContent.toLowerCase().includes(texto)) || (st && row.dataset.status !== st) || (prof && row.dataset.resp !== prof));
     });
   };
-  $('#agenda-busca').oninput = filtrar;
-  $('#agenda-status').onchange = filtrar;
+  const buscaEl = $('#agenda-busca'); if (buscaEl) buscaEl.oninput = filtrar;
+  const statusEl = $('#agenda-status'); if (statusEl) statusEl.onchange = filtrar;
+  const profEl = $('#agenda-prof');
+  if (profEl) profEl.onchange = () => {
+    if (verCal) location.hash = `#/agenda?v=cal&mes=${mesAtual}${profEl.value ? '&prof=' + encodeURIComponent(profEl.value) : ''}`;
+    else filtrar();
+  };
   const form = $('#agenda-form');
   if (form) form.onsubmit = async e => {
     e.preventDefault();
@@ -739,7 +793,7 @@ async function orcamento(id) {
   const cliente = obra ? await get('clientes', obra.clienteId) : null;
   const t = orcTotais(o);
   const statusAcoes = [['Enviado', 'Marcar como enviado'], ['Aprovado', 'Aprovar'], ['Recusado', 'Recusar']].filter(([s]) => s !== o.status).map(([s, l]) => `<a class="btn ghost" href="#" data-orc-status="${s}" data-orc-status-id="${o.id}">${l}</a>`).join('');
-  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<button type="button" class="btn" id="orc-enviar">Enviar ao cliente</button><button type="button" class="btn ghost" id="orc-copiar">Copiar link</button><a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
   ${o.status === 'Aprovado' ? '<div class="ok">Orçamento aprovado. Agende a visita para iniciar a vistoria.</div>' : ''}
   <div class="card laudo proposta">
     <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
@@ -756,7 +810,34 @@ async function orcamento(id) {
     </div>
     ${o.condicoes ? `<p><b>Condições de pagamento:</b> ${esc(o.condicoes)}</p>` : ''}
     ${o.observacoes ? `<p><b>Observações:</b> ${esc(o.observacoes)}</p>` : ''}
+  </div>
+  <div class="card noprint">
+    <div class="section-heading"><div><h3>Aprovação do cliente</h3><p>Registre a decisão do cliente sobre esta proposta.</p></div></div>
+    ${o.aprovacaoCliente ? `<p class="ok">Cliente ${o.aprovacaoCliente.status === 'Aprovado' ? 'aprovou' : 'recusou'} em ${fmt(o.aprovacaoCliente.em)}.</p>` : ''}
+    <div class="row"><button type="button" class="btn" id="orc-aprovar">Cliente aprovou</button><button type="button" class="btn ghost" id="orc-recusar">Cliente recusou</button></div>
   </div>`;
+  const enviar = $('#orc-enviar');
+  if (enviar) enviar.onclick = async () => {
+    await put('orcamentos', { ...o, status: (o.status === 'Aprovado' || o.status === 'Recusado') ? o.status : 'Enviado', atualizado: new Date().toISOString() });
+    const assunto = encodeURIComponent(`Proposta ${o.numero || ''} — VISTORI ENGENHARIA`);
+    const corpo = encodeURIComponent(`Olá ${cliente?.nome || ''},\n\nSegue a proposta ${o.numero || ''} no valor de ${brl(t.tot)}.\nServiço: ${o.tipo || ''}\nImóvel: ${obra?.nome || ''}\nValidade: ${o.validade ? dataBR(o.validade) : '—'}\n\nAtenciosamente,\nVISTORI ENGENHARIA`);
+    render();
+    try { window.open(`mailto:${cliente?.email || ''}?subject=${assunto}&body=${corpo}`, '_blank'); } catch (e) {}
+  };
+  const copiar = $('#orc-copiar');
+  if (copiar) copiar.onclick = async () => {
+    try { await navigator.clipboard.writeText(location.href); copiar.textContent = 'Link copiado!'; } catch (e) { alert('Copie o link: ' + location.href); }
+  };
+  const aprov = $('#orc-aprovar');
+  if (aprov) aprov.onclick = async () => {
+    await put('orcamentos', { ...o, status: 'Aprovado', aprovacaoCliente: { status: 'Aprovado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    render();
+  };
+  const recus = $('#orc-recusar');
+  if (recus) recus.onclick = async () => {
+    await put('orcamentos', { ...o, status: 'Recusado', aprovacaoCliente: { status: 'Recusado', em: new Date().toISOString() }, atualizado: new Date().toISOString() });
+    render();
+  };
 }
 
 const hf = (v, k, l, type = 'text') => `<div><label>${l}</label><input type="${type}" ${type === 'number' ? 'step="any" min="0"' : ''} data-h="${k}" value="${esc(v[k])}"></div>`;
@@ -935,6 +1016,12 @@ async function financeiro(q) {
   const receb = soma(recs.filter(r => r.status === 'Recebido'));
   const aberto = soma(recs.filter(r => r.status !== 'Recebido'));
   const atras = soma(recs.filter(r => recStatus(r) === 'Atrasado'));
+  const baseF = new Date(); baseF.setHours(0, 0, 0, 0);
+  const mesesF = [];
+  for (let k = 5; k >= 0; k--) { const d = new Date(baseF.getFullYear(), baseF.getMonth() - k, 1); mesesF.push({ y: d.getFullYear(), m: d.getMonth(), label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') }); }
+  const prevF = mesesF.map(x => recs.filter(r => { const d = r.vencimento ? new Date(r.vencimento + 'T12:00:00') : new Date(r.criado || 0); return d.getFullYear() === x.y && d.getMonth() === x.m; }).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const recF = mesesF.map(x => recs.filter(r => r.status === 'Recebido' && r.pagoEm && new Date(r.pagoEm).getFullYear() === x.y && new Date(r.pagoEm).getMonth() === x.m).reduce((n, r) => n + (Number(r.valor) || 0), 0));
+  const maxF = Math.max(1, ...prevF, ...recF);
   const opObra = obras.map(o => [o.id, `${o.nome} — ${cm[o.clienteId] || ''}`]);
   app.innerHTML = `<section class="section-heading client-head"><div><h2>Financeiro</h2><p>Receitas previstas, recebidas e contas a receber.</p></div>
     <div class="dashboard-actions"><a class="btn" href="#/financeiro?nova=1">+ Novo recebimento</a><button type="button" class="btn ghost" id="fin-gerar">Gerar de orçamentos/vistorias</button></div></section>
@@ -951,14 +1038,19 @@ async function financeiro(q) {
     <div class="kpi-card"><span>Em aberto</span><strong>${brl(aberto)}</strong><small>${recs.filter(r => r.status !== 'Recebido').length} lançamento(s)</small></div>
     <div class="kpi-card danger"><span>Atrasado</span><strong>${brl(atras)}</strong><small>Vencidos e não recebidos</small></div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="section-heading"><div><h3>Receita prevista × recebida</h3><p>Últimos 6 meses.</p></div></div>
+    <div class="chart" role="img" aria-label="Receita prevista e recebida por mês">${mesesF.map((x, i) => `<div class="chart-col"><div class="bars"><span class="bar" style="height:${Math.round(prevF[i] / maxF * 100)}%" title="Prevista ${brl(prevF[i])}"></span><span class="bar alt" style="height:${Math.round(recF[i] / maxF * 100)}%" title="Recebida ${brl(recF[i])}"></span></div><small>${x.label}</small></div>`).join('')}</div>
+    <div class="chart-legend"><span><i class="lg-prev"></i>Prevista</span><span><i class="lg-rec"></i>Recebida</span></div>
+  </div>
   <div class="card">
     <div class="list-filters">
       <input id="f-busca" placeholder="Buscar descrição, cliente ou imóvel…">
       <select id="f-status"><option value="">Todos os status</option><option value="Pendente">Pendente</option><option value="Recebido">Recebido</option><option value="Atrasado">Atrasado</option></select>
-      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option></select>
+      <select id="f-periodo"><option value="">Todo o período</option><option value="mes">Este mês</option><option value="ano">Este ano</option><option value="12">Últimos 12 meses</option></select>
     </div>
     <table><thead><tr><th>Descrição</th><th>Cliente/Imóvel</th><th>Origem</th><th>Vencimento</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="f-tbody">
-    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
+    ${recs.sort((a, b) => (a.vencimento || '9999').localeCompare(b.vencimento || '9999') || (b.criado || '').localeCompare(a.criado || '')).map(r => { const obra = om[r.obraId]; const st = recStatus(r); const badge = st === 'Recebido' ? 'signed' : st === 'Atrasado' ? 'orc-recusado' : 'draft'; const cid = r.clienteId || obra?.clienteId; return `<tr data-status="${st}" data-venc="${esc(r.vencimento || '')}"><td>${esc(r.descricao)}</td><td>${esc(cm[cid] || '—')}<br><small>${esc(obra?.nome || '—')}</small></td><td>${esc(r.origem === 'orcamento' ? 'Orçamento' : r.origem === 'vistoria' ? 'Vistoria' : 'Manual')}</td><td>${r.vencimento ? esc(dataBR(r.vencimento)) : '—'}</td><td>${brl(r.valor)}</td><td><span class="status-badge ${badge}">${st}</span>${r.pagoEm ? `<br><small>${new Date(r.pagoEm).toLocaleDateString('pt-BR')}</small>` : ''}</td><td class="act">${r.status === 'Recebido' ? `<a href="#/recibo/${r.id}">Recibo</a><a href="#" data-reabrir="${r.id}">Reabrir</a>` : `<a href="#" data-receber="${r.id}">Receber</a>`}<a href="#" data-del="recebimentos:${r.id}">Excluir</a></td></tr>`; }).join('') || '<tr><td colspan="7">Nenhum recebimento cadastrado.</td></tr>'}
     <tr id="f-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
     </tbody></table>
   </div>`;
@@ -1005,6 +1097,7 @@ async function financeiro(q) {
         if (!v) ok = false;
         else if (per === 'mes' && v.slice(0, 7) !== mes) ok = false;
         else if (per === 'ano' && Number(v.slice(0, 4)) !== ano) ok = false;
+        else if (per === '12') { const lim = new Date(hoje); lim.setMonth(lim.getMonth() - 12); if (new Date(v + 'T12:00:00') < lim) ok = false; }
       }
       r.hidden = !ok;
     });
@@ -1014,6 +1107,28 @@ async function financeiro(q) {
   const b = $('#f-busca'); if (b) b.oninput = filtrar;
   const s = $('#f-status'); if (s) s.onchange = filtrar;
   const p = $('#f-periodo'); if (p) p.onchange = filtrar;
+}
+
+/* ---------- recibo ---------- */
+async function recibo(id) {
+  const o = await get('recebimentos', id);
+  if (!o) { app.innerHTML = '<div class="warn">Recibo não encontrado.</div>'; return; }
+  const obra = o.obraId ? await get('obras', o.obraId) : null;
+  const cliente = obra ? await get('clientes', obra.clienteId) : null;
+  const recs = await all('recebimentos');
+  const recebidos = recs.filter(r => r.status === 'Recebido' && r.pagoEm).sort((a, b) => (a.pagoEm || '').localeCompare(b.pagoEm || ''));
+  const seq = recebidos.findIndex(r => r.id === o.id) + 1;
+  const ano = new Date(o.pagoEm || Date.now()).getFullYear();
+  const numero = `REC-${ano}-${String(seq || 1).padStart(4, '0')}`;
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/financeiro">Voltar ao financeiro</a></div>
+  <div class="card laudo recibo">
+    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <h1>Recibo</h1>
+    <p class="recibo-num"><span><b>Nº:</b> ${esc(numero)}</span><span><b>Valor:</b> ${brl(o.valor)}</span><span><b>Data:</b> ${o.pagoEm ? fmt(o.pagoEm) : '—'}</span></p>
+    <p class="recibo-corpo">Recebi de <b>${esc(cliente?.nome || '—')}</b> a importância de <b>${brl(o.valor)}</b> referente a <b>${esc(o.descricao || 'serviços de engenharia')}</b>${obra ? ` — ${esc(obra.nome)}` : ''}.</p>
+    <p>Para clareza, firmo o presente recibo.</p>
+    <div class="recibo-ass"><span></span><small>VISTORI ENGENHARIA</small></div>
+  </div>`;
 }
 
 /* ---------- usuários e acessos ---------- */
@@ -1420,7 +1535,7 @@ async function render() {
   curV = null; pad = null;
   const [path, q] = (location.hash.slice(2) || '').split('?');
   const [r, arg] = path.split('/');
-  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r;
+  const navKey = ['clientes', 'obras'].includes(r) ? r : CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r === 'cliente' ? 'clientes' : r === 'orcamento' ? 'orcamentos' : r === 'recibo' ? 'financeiro' : r;
   document.querySelectorAll('#nav a').forEach(a => {
     const on = a.getAttribute('href') === `#/${navKey}`;
     a.classList.toggle('on', on);
@@ -1431,10 +1546,10 @@ async function render() {
     g.classList.toggle('has-active', ativo);
     if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
   });
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, checklist, lgpd, usuarios, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, lgpd, usuarios, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
