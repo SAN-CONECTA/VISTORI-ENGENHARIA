@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.5.0';
+const VERSION = '0.5.1';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -508,7 +508,7 @@ async function agenda(q) {
   const om = Object.fromEntries(os.map(o => [o.id, o]));
   const cm = Object.fromEntries(cls.map(c => [c.id, c.nome]));
   const qp = new URLSearchParams(q || '');
-  const cur = ags.find(x => x.id === qp.get('e')) || {};
+  const cur = ags.find(x => x.id === qp.get('e')) || (qp.has('nova') ? { obraId: qp.get('obraId') || '', tipo: qp.get('tipo') || '', data: qp.get('data') || '' } : {});
   const mostrarForm = qp.has('nova') || !!cur.id;
   const hoje = new Date().toISOString().slice(0, 10);
   const status = ['Agendada', 'Confirmada', 'Em andamento', 'Concluída', 'Cancelada'];
@@ -738,7 +738,9 @@ async function orcamento(id) {
   const obra = o.obraId ? await get('obras', o.obraId) : null;
   const cliente = obra ? await get('clientes', obra.clienteId) : null;
   const t = orcTotais(o);
-  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a></div>
+  const statusAcoes = [['Enviado', 'Marcar como enviado'], ['Aprovado', 'Aprovar'], ['Recusado', 'Recusar']].filter(([s]) => s !== o.status).map(([s, l]) => `<a class="btn ghost" href="#" data-orc-status="${s}" data-orc-status-id="${o.id}">${l}</a>`).join('');
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
+  ${o.status === 'Aprovado' ? '<div class="ok">Orçamento aprovado. Agende a visita para iniciar a vistoria.</div>' : ''}
   <div class="card laudo proposta">
     <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
     <div class="proposta-head"><div><h1>Proposta Comercial</h1><p>${esc(o.numero || '')} · ${esc(o.status || '')}</p></div><div class="proposta-val"><small>Validade</small><b>${o.validade ? esc(dataBR(o.validade)) : '—'}</b></div></div>
@@ -933,6 +935,12 @@ document.addEventListener('click', async e => {
       const v = await novaVistoriaDaAgenda(agendamento);
       location.hash = `#/vistoria/${v.id}`;
     } catch (err) { alert(err.message); }
+  } else if (d.orcStatus) {
+    e.preventDefault();
+    const o = await get('orcamentos', d.orcStatusId);
+    if (!o) return;
+    await put('orcamentos', { ...o, status: d.orcStatus, atualizado: new Date().toISOString() });
+    render();
   } else if (d.reopen) {
     e.preventDefault();
     delete curV.assinatura; curV.status = 'rascunho'; await put('vistorias', curV); vistoria(curV.id);
