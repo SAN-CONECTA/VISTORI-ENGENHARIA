@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.10.0';
+const VERSION = '0.11.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -506,6 +506,16 @@ async function inicio() {
 /* ---------- agenda ---------- */
 const dataBR = data => data ? new Date(data + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 
+async function proximoNumeroLaudo() {
+  const cfg = (await get('config', 'numeracao')) || {};
+  const ano = new Date().getFullYear();
+  let proximo = Number(cfg.proximo) || 1;
+  if (Number(cfg.ano) !== ano) proximo = 1;
+  const numero = `${(cfg.prefixo || 'VST').trim()}-${ano}-${String(proximo).padStart(4, '0')}`;
+  await put('config', { id: 'numeracao', prefixo: (cfg.prefixo || 'VST').trim(), proximo: proximo + 1, ano });
+  return numero;
+}
+
 async function novaVistoriaDaAgenda(agendamento) {
   const [obra, ts] = await Promise.all([get('obras', agendamento.obraId), getTipos()]);
   if (!obra) throw new Error('O imóvel/obra deste agendamento não foi encontrado.');
@@ -792,11 +802,13 @@ async function orcamento(id) {
   const obra = o.obraId ? await get('obras', o.obraId) : null;
   const cliente = obra ? await get('clientes', obra.clienteId) : null;
   const t = orcTotais(o);
+  const emp = (await get('config', 'empresa')) || {};
   const statusAcoes = [['Enviado', 'Marcar como enviado'], ['Aprovado', 'Aprovar'], ['Recusado', 'Recusar']].filter(([s]) => s !== o.status).map(([s, l]) => `<a class="btn ghost" href="#" data-orc-status="${s}" data-orc-status-id="${o.id}">${l}</a>`).join('');
   app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${o.status === 'Aprovado' ? `<a class="btn" href="#/agenda?nova=1&obraId=${encodeURIComponent(o.obraId || '')}&tipo=${encodeURIComponent(o.tipo || '')}">Agendar visita</a>` : ''}<button type="button" class="btn" id="orc-enviar">Enviar ao cliente</button><button type="button" class="btn ghost" id="orc-copiar">Copiar link</button><a class="btn ghost" href="#/orcamentos">Voltar</a><a class="btn ghost" href="#/orcamentos?e=${o.id}">Editar</a>${statusAcoes}</div>
   ${o.status === 'Aprovado' ? '<div class="ok">Orçamento aprovado. Agende a visita para iniciar a vistoria.</div>' : ''}
   <div class="card laudo proposta">
-    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
+    <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}</p>
     <div class="proposta-head"><div><h1>Proposta Comercial</h1><p>${esc(o.numero || '')} · ${esc(o.status || '')}</p></div><div class="proposta-val"><small>Validade</small><b>${o.validade ? esc(dataBR(o.validade)) : '—'}</b></div></div>
     <p><b>Cliente:</b> ${esc(cliente?.nome || '—')} ${esc(cliente?.documento || '')}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome || '—')} — ${esc(obra?.endereco || '')} ${esc(obra?.cidade || '')}${obra?.uf ? '/' + esc(obra.uf) : ''}<br><b>Serviço:</b> ${esc(o.tipo || '—')}</p>
     <table class="orc-proposta"><thead><tr><th>Descrição</th><th>Qtd.</th><th>Un.</th><th>Valor unit.</th><th>Total</th></tr></thead><tbody>
@@ -871,7 +883,7 @@ async function vistoria(id) {
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
-  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
+  <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''}${v.numeroLaudo ? ' · ' + esc(v.numeroLaudo) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
   ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}. <a href="#" data-reopen="1">Reabrir (apaga a assinatura)</a></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
     <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
@@ -890,12 +902,15 @@ async function laudo(id) {
   if (!v) { app.innerHTML = '<div class="warn">Laudo não encontrado.</div>'; return; }
   const [obra, fm] = await Promise.all([get('obras', v.obraId), fotosMap(v)]);
   const cli = obra ? await get('clientes', obra.clienteId) : null;
+  const emp = (await get('config', 'empresa')) || {};
   const nc = v.itens.filter(i => i.status === 'N');
   let last = '';
   app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/vistoria/${v.id}">Voltar à vistoria</a>${v.assinatura ? `<button class="btn ghost" id="verif" data-id="${v.id}">Verificar integridade</button>` : ''}</div>
   <div class="card laudo">
-    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
+    <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}</p>
     <h1>Laudo de Vistoria — ${esc(v.tipo)}</h1>
+    <p class="laudo-num">${v.numeroLaudo ? 'Nº ' + esc(v.numeroLaudo) : 'Nº ainda não atribuído'}</p>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br>
     <b>Data:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
@@ -1115,6 +1130,7 @@ async function recibo(id) {
   if (!o) { app.innerHTML = '<div class="warn">Recibo não encontrado.</div>'; return; }
   const obra = o.obraId ? await get('obras', o.obraId) : null;
   const cliente = obra ? await get('clientes', obra.clienteId) : null;
+  const emp = (await get('config', 'empresa')) || {};
   const recs = await all('recebimentos');
   const recebidos = recs.filter(r => r.status === 'Recebido' && r.pagoEm).sort((a, b) => (a.pagoEm || '').localeCompare(b.pagoEm || ''));
   const seq = recebidos.findIndex(r => r.id === o.id) + 1;
@@ -1122,7 +1138,8 @@ async function recibo(id) {
   const numero = `REC-${ano}-${String(seq || 1).padStart(4, '0')}`;
   app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/financeiro">Voltar ao financeiro</a></div>
   <div class="card laudo recibo">
-    <img class="laudo-logo" src="logo.png" alt="VISTORI ENGENHARIA">
+    <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
+    <p class="doc-empresa">${esc(emp.razao || 'VISTORI ENGENHARIA')}${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''}</p>
     <h1>Recibo</h1>
     <p class="recibo-num"><span><b>Nº:</b> ${esc(numero)}</span><span><b>Valor:</b> ${brl(o.valor)}</span><span><b>Data:</b> ${o.pagoEm ? fmt(o.pagoEm) : '—'}</span></p>
     <p class="recibo-corpo">Recebi de <b>${esc(cliente?.nome || '—')}</b> a importância de <b>${brl(o.valor)}</b> referente a <b>${esc(o.descricao || 'serviços de engenharia')}</b>${obra ? ` — ${esc(obra.nome)}` : ''}.</p>
@@ -1160,6 +1177,59 @@ async function usuarios() {
     const email = String(d.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert('Informe um e-mail válido.');
     await put('acessos', { id: email, nome: (d.nome || '').trim(), perfil: d.perfil || 'Administrador', criado: new Date().toISOString() });
+    render();
+  };
+}
+
+/* ---------- configurações ---------- */
+async function configuracoes() {
+  const [emp, num] = await Promise.all([get('config', 'empresa'), get('config', 'numeracao')]);
+  const e = emp || {};
+  const anoAtual = new Date().getFullYear();
+  const n = num || { prefixo: 'VST', proximo: 1, ano: anoAtual };
+  let logoData = e.logo || '';
+  app.innerHTML = `<section class="section-heading client-head"><div><h2>Configurações</h2><p>Dados da empresa, identidade dos documentos e numeração de laudos.</p></div></section>
+  <form id="cfg-emp" class="card grid">
+    <h3 style="grid-column:1/-1">Dados da empresa</h3>
+    ${fieldHtml({ k: 'razao', l: 'Razão social' }, e.razao || 'VISTORI ENGENHARIA')}
+    ${fieldHtml({ k: 'cnpj', l: 'CNPJ' }, e.cnpj || '')}
+    ${fieldHtml({ k: 'endereco', l: 'Endereço' }, e.endereco || '')}
+    ${fieldHtml({ k: 'cidade', l: 'Cidade' }, e.cidade || '')}
+    ${fieldHtml({ k: 'uf', l: 'UF', opts: UFS.map(u => [u, u]) }, e.uf || '')}
+    ${fieldHtml({ k: 'telefone', l: 'Telefone' }, e.telefone || '')}
+    ${fieldHtml({ k: 'email', l: 'E-mail' }, e.email || '')}
+    ${fieldHtml({ k: 'site', l: 'Site' }, e.site || '')}
+    ${fieldHtml({ k: 'retencao', l: 'Retenção de dados (anos)', type: 'number' }, e.retencao || 10)}
+    <h3 style="grid-column:1/-1">Identidade dos documentos</h3>
+    <div><label>Logotipo</label><input type="file" id="cfg-logo" accept="image/*"><small>${e.logo ? 'Logotipo personalizado ativo.' : 'Usando o logotipo padrão.'}</small></div>
+    ${fieldHtml({ k: 'cor1', l: 'Cor primária (destaques)', type: 'color' }, e.cor1 || '#256e71')}
+    ${fieldHtml({ k: 'cor2', l: 'Cor secundária (destaques)', type: 'color' }, e.cor2 || '#b78c47')}
+    <div class="row" style="grid-column:1/-1"><button class="btn">Salvar dados da empresa</button></div>
+  </form>
+  <form id="cfg-num" class="card grid">
+    <h3 style="grid-column:1/-1">Numeração de laudos</h3>
+    ${fieldHtml({ k: 'prefixo', l: 'Prefixo', req: 1 }, n.prefixo || 'VST')}
+    ${fieldHtml({ k: 'proximo', l: 'Próximo número', req: 1, type: 'number' }, n.proximo || 1)}
+    ${fieldHtml({ k: 'ano', l: 'Ano', req: 1, type: 'number' }, n.ano || anoAtual)}
+    <p style="grid-column:1/-1">Próximo laudo: <b>${esc((n.prefixo || 'VST') + '-' + (n.ano || anoAtual) + '-' + String(n.proximo || 1).padStart(4, '0'))}</b> · a numeração reinicia a cada ano.</p>
+    <div class="row" style="grid-column:1/-1"><button class="btn">Salvar numeração</button></div>
+  </form>`;
+  const logo = $('#cfg-logo');
+  if (logo) logo.onchange = async ev => { const f = ev.target.files[0]; if (f) { logoData = await comprimir(f); alert('Logotipo carregado. Clique em "Salvar dados da empresa" para aplicar.'); } };
+  const fe = $('#cfg-emp');
+  if (fe) fe.onsubmit = async ev => {
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(fe));
+    await put('config', { id: 'empresa', ...d, logo: logoData, retencao: Number(d.retencao) || 10 });
+    alert('Dados da empresa salvos.');
+    render();
+  };
+  const fn = $('#cfg-num');
+  if (fn) fn.onsubmit = async ev => {
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(fn));
+    await put('config', { id: 'numeracao', prefixo: (d.prefixo || 'VST').trim(), proximo: Number(d.proximo) || 1, ano: Number(d.ano) || anoAtual });
+    alert('Numeração salva.');
     render();
   };
 }
@@ -1273,6 +1343,7 @@ document.addEventListener('click', async e => {
     const ts = new Date().toISOString();
     const hash = await calcHash(curV, ts);
     curV.assinatura = { nome, img: $('#sig').toDataURL('image/png'), ts, hash, fotosSha: await fotosSha(curV) };
+    if (!curV.numeroLaudo) curV.numeroLaudo = await proximoNumeroLaudo();
     curV.status = 'assinada';
     await put('vistorias', curV);
     location.hash = `#/laudo/${curV.id}`;
@@ -1546,10 +1617,10 @@ async function render() {
     g.classList.toggle('has-active', ativo);
     if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
   });
-  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', backup: 'Backup' };
+  const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist padrão', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();
-  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, lgpd, usuarios, backup };
+  const R = { '': inicio, agenda, cadastros, clientes, cliente: () => cliente(arg), obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), orcamentos, orcamento: () => orcamento(arg), financeiro, recibo: () => recibo(arg), checklist, lgpd, usuarios, configuracoes, backup };
   try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
