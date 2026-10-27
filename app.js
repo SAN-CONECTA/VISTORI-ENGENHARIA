@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.11.0';
+const VERSION = '0.12.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
