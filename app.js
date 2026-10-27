@@ -1,5 +1,5 @@
 'use strict';
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const MODO = localStorage.getItem('vistori_modo') || 'nuvem';
@@ -322,7 +322,7 @@ async function precos() {
   const pm = Object.fromEntries(ps.map(p => [p.id, p.valor]));
   app.innerHTML = `<p class="noprint"><a href="#/cadastros">← Cadastros</a></p><h2>Tabela de Preços</h2>
   <div class="card"><p>Valor padrão (R$) por tipo de serviço e tipo de imóvel. Ao criar uma vistoria, o valor correspondente já vem preenchido e pode ser ajustado. Deixe em branco quando não houver preço padrão. Salva ao sair do campo.</p>
-  <table><thead><tr><th>Serviço</th>${TIPOS_OBRA.map(t => `<th>${esc(t)}</th>`).join('')}</tr></thead><tbody>
+  <table class="matrix-table"><thead><tr><th>Serviço</th>${TIPOS_OBRA.map(t => `<th>${esc(t)}</th>`).join('')}</tr></thead><tbody>
   ${ts.map(t => `<tr><td>${esc(t.nome)}</td>${TIPOS_OBRA.map(o => `<td><input type="number" step="0.01" min="0" data-p="${t.id}|${o}" value="${pm[t.id + '|' + o] ?? ''}"></td>`).join('')}</tr>`).join('') || '<tr><td colspan="5">Cadastre os tipos de serviço primeiro.</td></tr>'}
   </tbody></table></div>
   <p><a href="#/catalogo">Catálogo de itens e serviços adicionais →</a></p>`;
@@ -629,6 +629,34 @@ function userBox() {
 addEventListener('online', userBox);
 addEventListener('offline', userBox);
 
+/* ---------- adaptação da interface a telas menores ---------- */
+const nav = $('#nav');
+const navToggle = $('#nav-toggle');
+function closeNav() {
+  nav.classList.remove('open');
+  navToggle.setAttribute('aria-expanded', 'false');
+  navToggle.setAttribute('aria-label', 'Abrir menu');
+}
+navToggle.addEventListener('click', () => {
+  const open = nav.classList.toggle('open');
+  navToggle.setAttribute('aria-expanded', String(open));
+  navToggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
+});
+nav.addEventListener('click', e => { if (e.target.closest('a')) closeNav(); });
+addEventListener('resize', () => { if (innerWidth > 700) closeNav(); });
+
+function responsiveTables() {
+  app.querySelectorAll('table:not(.matrix-table)').forEach(table => {
+    table.classList.add('responsive-table');
+    const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim() || 'Ações');
+    table.querySelectorAll('tbody tr').forEach(row => {
+      [...row.cells].forEach((cell, i) => {
+        if (!cell.hasAttribute('colspan')) cell.dataset.label = labels[i] || 'Ações';
+      });
+    });
+  });
+}
+
 const msgAuth = err => ({
   'auth/invalid-credential': 'E-mail ou senha incorretos.',
   'auth/wrong-password': 'E-mail ou senha incorretos.',
@@ -711,8 +739,9 @@ async function render() {
   const [r, arg] = path.split('/');
   const navKey = CAD.includes(r) ? 'cadastros' : r === 'vistoria' || r === 'laudo' ? 'vistorias' : r;
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === `#/${navKey}`));
+  closeNav();
   const R = { '': inicio, cadastros, clientes, obras, fornecedores, tipos: tiposServico, catalogo, precos, vistorias, vistoria: () => vistoria(arg), laudo: () => laudo(arg), checklist, backup };
-  try { await (R[r] || inicio)(q); }
+  try { await (R[r] || inicio)(q); responsiveTables(); }
   catch (err) {
     console.error(err);
     app.innerHTML = err.code === 'permission-denied'

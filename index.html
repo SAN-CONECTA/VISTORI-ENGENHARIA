@@ -8,10 +8,18 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="responsive.css">
 </head>
 <body>
 <header class="noprint">
-  <a class="brand" href="#/"><img src="logo-emblema.png" alt="" height="44"><span><b>VISTORI</b><i>ENGENHARIA</i></span></a> <small id="ver"></small> <span id="userbox" class="userbox noprint"></span>
+  <div class="headerbar">
+    <a class="brand" href="#/"><img src="logo-emblema.png" alt="" height="44"><span><b>VISTORI</b><i>ENGENHARIA</i></span></a>
+    <small id="ver"></small>
+    <span id="userbox" class="userbox noprint"></span>
+    <button id="nav-toggle" class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav" aria-label="Abrir menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
   <nav id="nav">
     <a href="#/">Início</a>
     <a href="#/cadastros">Cadastros</a>
