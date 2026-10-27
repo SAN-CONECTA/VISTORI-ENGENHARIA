@@ -2,7 +2,8 @@
 const VERSION = '0.4.0';
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
-const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
+  || (location.hostname === 'san-conecta.github.io' && location.pathname.startsWith('/VISTORI-ENGENHARIA-DEV/'));
 const MODO = AMBIENTE_LOCAL ? 'local' : (localStorage.getItem('vistori_modo') || 'nuvem');
 const SDK_VERSIONS = ['11.10.0', '10.14.1'];
 const STORES = ['clientes', 'obras', 'vistorias', 'config', 'fornecedores', 'tipos', 'catalogo', 'precos', 'fotos'];
