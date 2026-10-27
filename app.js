@@ -867,6 +867,40 @@ function sigPad(c) {
   return { isEmpty: () => empty, clear: () => { x.clearRect(0, 0, c.width, c.height); empty = true; } };
 }
 
+function abrirMarcador(src, onSave) {
+  const box = document.createElement('div');
+  box.className = 'marker noprint'; box.id = 'marker';
+  box.innerHTML = `<div class="marker-panel"><div class="section-heading"><div><h3>Marcar sobre a foto</h3><p>Arraste sobre a imagem para destacar a anomalia.</p></div></div><div class="marker-wrap"><img id="marker-img" src="${src}" alt=""><canvas id="marker-canvas"></canvas></div><div class="row"><button type="button" class="btn ghost" id="marker-clear">Limpar</button><button type="button" class="btn" id="marker-save">Salvar marcação</button><button type="button" class="btn ghost" id="marker-cancel">Cancelar</button></div></div>`;
+  document.body.appendChild(box);
+  const img = box.querySelector('#marker-img');
+  const cv = box.querySelector('#marker-canvas');
+  const ctx = cv.getContext('2d');
+  let drawing = false, painted = false;
+  const setup = () => {
+    cv.width = img.naturalWidth || img.width || 800;
+    cv.height = img.naturalHeight || img.height || 600;
+    const r = img.getBoundingClientRect();
+    cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  };
+  if (img.complete && img.naturalWidth) setup(); else img.onload = setup;
+  const pos = ev => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+  cv.onpointerdown = ev => { drawing = true; painted = true; const [x, y] = pos(ev); ctx.beginPath(); ctx.moveTo(x, y); try { cv.setPointerCapture(ev.pointerId); } catch (e) {} };
+  cv.onpointermove = ev => { if (!drawing) return; const [x, y] = pos(ev); ctx.lineWidth = Math.max(3, cv.width / 250); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#e53935'; ctx.lineTo(x, y); ctx.stroke(); };
+  cv.onpointerup = () => { drawing = false; };
+  box.querySelector('#marker-clear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); painted = false; };
+  box.querySelector('#marker-cancel').onclick = () => box.remove();
+  box.querySelector('#marker-save').onclick = async () => {
+    if (!painted) return alert('Faça uma marcação antes de salvar.');
+    const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height;
+    const o = out.getContext('2d');
+    o.drawImage(img, 0, 0, out.width, out.height);
+    o.drawImage(cv, 0, 0);
+    const dataUrl = out.toDataURL('image/jpeg', 0.7);
+    box.remove();
+    await onSave(dataUrl);
+  };
+}
+
 async function vistoria(id) {
   const v = await get('vistorias', id);
   if (!v) { app.innerHTML = '<div class="warn">Vistoria não encontrada.</div>'; return; }
@@ -882,7 +916,7 @@ async function vistoria(id) {
     return `${hd}<div class="item"><h4>${esc(it.desc)}</h4>
     <select data-i="${i}" data-f="status">${Object.entries(ST).map(([k, l]) => `<option value="${k}" ${it.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <textarea data-i="${i}" data-f="obs" placeholder="Observações / descrição da anomalia">${esc(it.obs)}</textarea>
-    <div class="fotos">${it.fotos.map((f, j) => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><input data-i="${i}" data-j="${j}" data-f="legenda" placeholder="Legenda" value="${esc(f.legenda)}"><a href="#" data-rm="${i}:${j}">remover</a></div>`).join('')}</div>
+    <div class="fotos">${it.fotos.map((f, j) => `<div class="foto"><img src="${f.src || fm[f.id] || ''}" alt=""><input data-i="${i}" data-j="${j}" data-f="legenda" placeholder="Legenda" value="${esc(f.legenda)}"><a href="#" data-rm="${i}:${j}">remover</a>${locked ? '' : `<a href="#" data-marcar="${i}:${j}">marcar</a>`}</div>`).join('')}</div>
     <label>+ Foto</label><input type="file" accept="image/*" multiple data-photo="${i}"></div>`;
   }).join('');
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
@@ -1357,6 +1391,19 @@ document.addEventListener('click', async e => {
     if (f.id) await del('fotos', f.id);
     curV.itens[i].fotos.splice(j, 1); await put('vistorias', curV);
     const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+  } else if (d.marcar) {
+    e.preventDefault();
+    const [i, j] = d.marcar.split(':').map(Number);
+    const f = curV.itens[i]?.fotos[j];
+    if (!f) return;
+    const src = f.src || (f.id ? (await get('fotos', f.id))?.src : '');
+    if (!src) return alert('Imagem não encontrada.');
+    abrirMarcador(src, async dataUrl => {
+      if (f.id) { const foto = await get('fotos', f.id); if (foto) await put('fotos', { ...foto, src: dataUrl }); }
+      else { f.src = dataUrl; }
+      await put('vistorias', curV);
+      const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+    });
   } else if (d.agendaIniciar) {
     e.preventDefault();
     const agendamento = await get('agendamentos', d.agendaIniciar);
