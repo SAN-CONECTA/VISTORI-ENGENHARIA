@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // Cole em: Firebase Console > Firestore Database > Regras > Publicar.
-// Bootstrap: estes e-mails sempre entram e podem autorizar outros em "Usuários e acessos".
+// Bootstrap: estes e-mails sempre entram e são administradores.
 // Os demais e-mails precisam existir em /acessos/{email}.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -25,28 +25,171 @@ service cloud.firestore {
         && (bootstrap() || exists(/databases/$(database)/documents/acessos/$(emailAtual())));
     }
 
+    // Administrador = e-mail bootstrap ou documento em /acessos/{email}
+    // com perfil "Administrador" (campo gravado por src/views/usuarios.js).
+    function administrador() {
+      return request.auth != null
+        && emailAtual() != ''
+        && (bootstrap() || (
+          exists(/databases/$(database)/documents/acessos/$(emailAtual()))
+          && get(/databases/$(database)/documents/acessos/$(emailAtual())).data.perfil == 'Administrador'
+        ));
+    }
+
+    // Vistoria vinculada a um registro (foto, anomalia ou documento).
+    // Sem vistoriaId, o registro é independente (ex.: documento do GED em uma obra).
+    function idVistoria(dados) {
+      return dados.keys().hasAny(['vistoriaId']) ? dados.vistoriaId : '';
+    }
+
+    // Permite alterar registros ligados a vistorias ainda não assinadas ou órfãos.
+    // Vistoria assinada fica protegida; para editar, é preciso reabrir (nova versão).
+    function vistoriaAberta(vistoriaId) {
+      return vistoriaId == ''
+        || !exists(/databases/$(database)/documents/vistorias/$(vistoriaId))
+        || !get(/databases/$(database)/documents/vistorias/$(vistoriaId)).data.keys().hasAny(['status'])
+        || get(/databases/$(database)/documents/vistorias/$(vistoriaId)).data.status != 'assinada';
+    }
+
+    function registroEditavel(dados) {
+      return vistoriaAberta(idVistoria(dados));
+    }
+
+    // Reabertura: só permite remover a assinatura, voltar para rascunho e
+    // incrementar a versão. Qualquer outro campo alterado bloqueia a operação.
+    function reaberturaAutorizada() {
+      return resource.data.status == 'assinada'
+        && request.resource.data.status == 'rascunho'
+        && !request.resource.data.keys().hasAny(['assinatura'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['assinatura', 'status', 'versao'])
+        && (
+          (resource.data.keys().hasAny(['versao'])
+            && request.resource.data.versao == resource.data.versao + 1)
+          || (!resource.data.keys().hasAny(['versao'])
+            && request.resource.data.versao == 2)
+        );
+    }
+
+    // Ciência do cliente: única alteração permitida depois de assinar, uma vez,
+    // e somente no campo cienciaCliente (nome/em). O hash do laudo ignora esse campo.
+    function cienciaAutorizada() {
+      return resource.data.status == 'assinada'
+        && request.resource.data.status == 'assinada'
+        && !resource.data.keys().hasAny(['cienciaCliente'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cienciaCliente'])
+        && request.resource.data.cienciaCliente.keys().hasOnly(['nome', 'em'])
+        && request.resource.data.cienciaCliente.nome is string
+        && request.resource.data.cienciaCliente.em is string;
+    }
+
+    // A lixeira não pode ser usada por um usuário comum para "preparar" a
+    // exclusão de um acesso. O app grava o campo store no documento.
+    function lixeiraPermitida(dados) {
+      return !dados.keys().hasAny(['store'])
+        || dados.store != 'acessos'
+        || administrador();
+    }
+
+    // ---------- Cadastros e dados operacionais (inalterados) ----------
     match /clientes/{id} { allow read, create, update, delete: if autorizado(); }
     match /obras/{id} { allow read, create, update, delete: if autorizado(); }
     match /fornecedores/{id} { allow read, create, update, delete: if autorizado(); }
     match /tipos/{id} { allow read, create, update, delete: if autorizado(); }
     match /catalogo/{id} { allow read, create, update, delete: if autorizado(); }
     match /precos/{id} { allow read, create, update, delete: if autorizado(); }
+    // Configuração continua editável por autorizados (checklist genérico,
+    // empresa e numeração). Não é o foco desta restrição.
     match /config/{id} { allow read, create, update, delete: if autorizado(); }
-    match /fotos/{id} { allow read, create, update, delete: if autorizado(); }
     match /agendamentos/{id} { allow read, create, update, delete: if autorizado(); }
     match /orcamentos/{id} { allow read, create, update, delete: if autorizado(); }
     match /recebimentos/{id} { allow read, create, update, delete: if autorizado(); }
-    match /acessos/{id} { allow read, create, update, delete: if autorizado(); }
-    match /lixeira/{id} { allow read, create, delete: if autorizado(); }
 
-    // Trilha de auditoria: somente leitura e novos registros (não pode ser alterada nem apagada).
+    // ---------- Modelos de checklist: somente administradores ----------
+    match /checklistModelos/{id} {
+      allow read: if autorizado();
+      // Exceção estreita de bootstrap técnico: o app semeia o modelo padrão
+      // no primeiro acesso de qualquer usuário autorizado (getModelos()).
+      // Sem isso, usuários comuns não conseguiriam abrir Vistorias/Agenda
+      // em uma base nova. Depois de criado, só administradores alteram.
+      allow create: if administrador() || (
+        autorizado()
+        && request.resource.data.keys().hasAny(['id'])
+        && request.resource.data.id == id
+        && request.resource.data.id == 'mdl-recebimento-casa-nova'
+        && request.resource.data.keys().hasAny(['padrao'])
+        && request.resource.data.padrao == true
+      );
+      allow update, delete: if administrador();
+    }
+
+    // ---------- Fotos, anomalias e documentos ----------
+    // Leitura livre para autorizados; escrita somente na vistoria aberta.
+    match /fotos/{id} {
+      allow read: if autorizado();
+      allow create: if autorizado() && registroEditavel(request.resource.data);
+      allow update: if autorizado()
+        && idVistoria(request.resource.data) == idVistoria(resource.data)
+        && registroEditavel(resource.data)
+        && registroEditavel(request.resource.data);
+      allow delete: if autorizado() && registroEditavel(resource.data);
+    }
+
+    match /anomalias/{id} {
+      allow read: if autorizado();
+      allow create: if autorizado() && registroEditavel(request.resource.data);
+      allow update: if autorizado()
+        && idVistoria(request.resource.data) == idVistoria(resource.data)
+        && registroEditavel(resource.data)
+        && registroEditavel(request.resource.data);
+      allow delete: if autorizado() && registroEditavel(resource.data);
+    }
+
+    match /documentos/{id} {
+      allow read: if autorizado();
+      allow create: if autorizado() && registroEditavel(request.resource.data);
+      allow update: if autorizado()
+        && idVistoria(request.resource.data) == idVistoria(resource.data)
+        && registroEditavel(resource.data)
+        && registroEditavel(request.resource.data);
+      allow delete: if autorizado() && registroEditavel(resource.data);
+    }
+
+    // Histórico de versões do laudo: append-only (leitura e criação).
+    match /versoes/{id} { allow read, create: if autorizado(); }
+
+    // ---------- Usuários e acessos: somente administradores ----------
+    match /acessos/{id} {
+      allow read: if autorizado();
+      allow create: if administrador();
+      // Um administrador não pode se rebaixar; bootstrap continua admin.
+      allow update: if administrador()
+        && (id != emailAtual() || bootstrap() || request.resource.data.perfil == 'Administrador');
+      // Um administrador não pode se excluir; bootstrap pode limpar o próprio doc.
+      allow delete: if administrador() && (id != emailAtual() || bootstrap());
+    }
+
+    // ---------- Lixeira ----------
+    match /lixeira/{id} {
+      allow read: if autorizado();
+      allow create: if autorizado() && lixeiraPermitida(request.resource.data);
+      allow delete: if autorizado() && lixeiraPermitida(resource.data);
+    }
+
+    // ---------- Auditoria: somente leitura e novos registros ----------
     match /auditoria/{id} { allow read, create: if autorizado(); }
 
-    // Depois de assinada, a vistoria não pode mais ser alterada.
+    // ---------- Vistorias ----------
     match /vistorias/{id} {
       allow read, create: if autorizado();
-      allow update: if autorizado() && resource.data.status != 'assinada';
+      // Rascunho pode ser editado normalmente. Assinada só aceita:
+      // ciência do cliente ou reabertura com nova versão.
+      allow update: if autorizado() && (
+        resource.data.status != 'assinada'
+        || reaberturaAutorizada()
+        || cienciaAutorizada()
+      );
       allow delete: if autorizado() && resource.data.status != 'assinada';
     }
   }
 }
+

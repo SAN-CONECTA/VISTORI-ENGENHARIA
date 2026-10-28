@@ -1,10 +1,45 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **MVP v0.1.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.17.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
-→ Vistoria (checklist + fotos) → Assinatura → Laudo em PDF.
+→ Vistoria (modelo de checklist + checklist genérico, fotos) → Assinatura → Laudo em PDF.
+
+Modelos de checklist reutilizáveis (por exemplo, **Recebimento de imóvel — casa nova**) ficam em **Administração → Modelos de checklist**. O modelo é copiado para a vistoria na criação: editar o modelo depois não altera vistorias já existentes. O checklist genérico continua disponível em **Checklist**.
+
+Na nuvem, publique o `firestore.rules` atualizado para liberar a coleção `checklistModelos`; sem isso, as telas de vistorias, agenda e modelos recebem `permission-denied`.
+
+## Estrutura do código
+
+Sem build: são módulos ES servidos direto (`<script type="module">`). O `app.js` é só a entrada.
+
+```
+app.js            entrada do PWA (importa src/main.js)
+src/main.js       registra interface/eventos e chama boot()
+src/boot.js       carrega o SDK, escolhe o backend e reage ao login
+src/router.js     render() e tabela de rotas (#/clientes, #/vistoria/:id…)
+src/core/         regras e infraestrutura (sem HTML de tela)
+  config.js       VERSION, MODO, STORES e enums
+  state.js        estado mutável (backend, usuário, vistoria aberta, assinatura)
+  navigate.js     refresh()/setRenderer() — evita views <-> router
+  dom.js          $, esc, fieldHtml, crud, sigPad, abrirMarcador
+  utils.js        datas, formatação, sha/canon, compressão de imagem
+  db/local.js     IndexedDB
+  db/cloud.js     Firestore (cache offline)
+  db/index.js     fachada all/get/put/del
+  docs.js · checklist.js · tipos.js · fotos.js · laudo.js · auditoria.js · lixeira.js · migracao.js
+src/ui/           chrome.js (sidebar, tema, busca) e events.js (eventos delegados)
+src/views/        uma tela por arquivo
+```
+
+Três regras para não recriar o acoplamento antigo:
+
+1. Tela não importa o roteador; chama `refresh()` de `src/core/navigate.js`.
+2. Tela não fala com `L` nem com o Firestore; usa `all/get/put/del` de `src/core/db/index.js`.
+3. Estado compartilhado só muda pelos setters de `src/core/state.js`.
+
+Ao criar um módulo novo, acrescente o caminho em `MODULOS`, no `sw.js` — é o que mantém o app abrindo offline.
 
 ## Configuração do Firebase (feita uma vez)
 1. Authentication → Método de login → E-mail/senha → Ativar. Crie os usuários em **Usuários → Adicionar usuário**.
