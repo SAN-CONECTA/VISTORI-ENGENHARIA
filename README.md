@@ -1,12 +1,14 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.17.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.17.1**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
 → Vistoria (modelo de checklist + checklist genérico, fotos) → Assinatura → Laudo em PDF.
 
-Modelos de checklist reutilizáveis (por exemplo, **Recebimento de imóvel — casa nova**) ficam em **Administração → Modelos de checklist**. O modelo é copiado para a vistoria na criação: editar o modelo depois não altera vistorias já existentes. O checklist genérico continua disponível em **Checklist**.
+Modelos de checklist reutilizáveis (por exemplo, **Recebimento de imóvel — casa nova**) ficam em **Administração → Modelos de checklist**. Somente administradores criam, editam, duplicam, ativam/desativam, restauram ou excluem modelos. O modelo escolhido é copiado para a vistoria na criação: editar o modelo depois não altera vistorias já existentes. O checklist genérico continua disponível em **Checklist**.
+
+O modelo padrão **não é mais semeado automaticamente**. Em uma base nova, um administrador deve abrir **Modelos de checklist** e usar **“Criar modelo padrão”**. Vistorias e agenda continuam funcionando sem modelo, usando o checklist genérico.
 
 Na nuvem, publique o `firestore.rules` atualizado para liberar a coleção `checklistModelos`; sem isso, as telas de vistorias, agenda e modelos recebem `permission-denied`.
 

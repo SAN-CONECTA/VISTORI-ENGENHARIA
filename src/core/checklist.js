@@ -1,8 +1,9 @@
 // Checklists: o modelo genérico editável em Configurações e os modelos por
 // tipo de vistoria (store `checklistModelos`). O modelo escolhido é copiado
 // para dentro da vistoria, para que mudanças futuras não alterem laudos antigos.
-import { ST, ST_RECEB } from './config.js';
+import { ADMIN_EMAILS, MODO, ST, ST_RECEB } from './config.js';
 import { all, get, put } from './db/index.js';
+import { USER } from './state.js';
 
 const DEFAULT_CHECK = {
   'Análise estrutural': ['Fissuras e trincas', 'Infiltrações em lajes e paredes', 'Pilares, vigas e lajes aparentes'],
@@ -243,20 +244,28 @@ export function parseModeloTexto(texto) {
   return categorias.filter(c => c.nome && c.itens.length);
 }
 
-/** Lê os modelos; semeia o modelo de recebimento na primeira execução. */
+/** Lê os modelos. Não grava nada: o modelo padrão é criado por um administrador. */
 export async function getModelos() {
-  const semeado = await get('config', 'seedChecklistModelos');
-  let modelos = await all('checklistModelos');
-  if (!semeado) {
-    if (!modelos.some(m => m.id === MODELO_RECEBIMENTO_ID)) {
-      const agora = new Date().toISOString();
-      const novo = { ...copiar(MODELO_RECEBIMENTO), criado: agora, atualizado: agora };
-      await put('checklistModelos', novo);
-      modelos = [...modelos, novo];
-    }
-    await put('config', { id: 'seedChecklistModelos', ok: true });
-  }
+  const modelos = await all('checklistModelos');
   return modelos.sort((a, b) => Number(!!b.padrao) - Number(!!a.padrao) || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+}
+
+/**
+ * UI: em local o operador único é tratado como administrador; na nuvem,
+ * exige e-mail bootstrap ou perfil "Administrador" em /acessos.
+ * As regras do Firestore continuam sendo a autoridade final.
+ */
+export async function podeAdministrarModelos() {
+  if (MODO === 'local') return true;
+  const email = (USER?.email || '').toLowerCase();
+  if (!email) return false;
+  if (ADMIN_EMAILS.includes(email)) return true;
+  try {
+    const acesso = await get('acessos', email);
+    return acesso?.perfil === 'Administrador';
+  } catch (e) {
+    return false;
+  }
 }
 
 export const getModelo = id => get('checklistModelos', id);

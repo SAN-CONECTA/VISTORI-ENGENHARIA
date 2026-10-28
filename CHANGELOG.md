@@ -3,6 +3,14 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.17.1 — Administração de modelos restrita a administradores
+- Removida das regras do Firestore a exceção que permitia a qualquer usuário autorizado criar o modelo padrão `mdl-recebimento-casa-nova`
+- `getModelos()` não grava mais automaticamente: o modelo padrão é criado apenas pela ação **Criar/Restaurar modelo padrão** na tela de modelos
+- Vistorias e agenda continuam funcionando sem modelo, usando o checklist genérico
+- Tela de modelos em modo leitura para não administradores, exibindo somente modelos ativos; ações de criar/editar/duplicar/ativar/desativar/restaurar/excluir ficam restritas a administradores (o cliente também valida o perfil; as regras do Firestore continuam sendo a autoridade)
+- Versão e service worker atualizados para 0.17.1, para que o novo JavaScript chegue aos clientes com cache
+- As regras precisam ser publicadas manualmente no Firebase Console
+
 ## 0.17.0 — Modelos de checklist e vistoria de recebimento
 - Novo store `checklistModelos` (IndexedDB v12 e coleção `checklistModelos` no Firestore) para vários modelos de checklist
 - Modelo **Recebimento de imóvel — casa nova**, com 10 categorias e 96 itens técnicos extraídos do checklist de referência, incluindo descrição de acabamentos por ambiente
