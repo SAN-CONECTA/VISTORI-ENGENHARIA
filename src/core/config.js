@@ -1,6 +1,8 @@
 // Constantes e configuração de execução (versão, modo, coleções e enums).
 
-export const VERSION = '0.17.0';
+export const VERSION = '0.17.1';
+// Deve espelhar os e-mails bootstrap de firestore.rules.
+export const ADMIN_EMAILS = ['sandro@santecnologia.com', 'victoriarochaeng@hotmail.com', 'sandro@sanconecta.com'];
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
    | 'nuvem-teste' (Firebase sem tela de login; só para testes — as regras do Firestore continuam valendo). */
 const AMBIENTE_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname)
