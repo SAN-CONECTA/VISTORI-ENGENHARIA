@@ -3,12 +3,25 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.21.0 — Listagem, detalhe e checklist
+- Indicador do topo corrigido para **Online/Offline** quando só há conexão do navegador; “Sincronizado” não é mais exibido sem confirmação real do envio à nuvem
+- Lista de vistorias trocou o formulário permanente por um **painel lateral “Nova vistoria”**, com foco inicial, foco preso, Esc, botão de fechar, retorno de foco e confirmação para descartar dados
+- Linha de vistoria com **Abrir** em destaque e menu secundário **Ações** para **Ver laudo** e **Excluir**; confirmação e proteção de laudo assinado preservadas
+- Detalhe reorganizado em abas **Dados gerais**, **Checklist**, **Anomalias**, **Documentos** e **Laudo**, com teclado (setas/Home/End), cabeçalho com status e progresso real
+- Feedback de salvamento real: **Alterações pendentes**, **Salvando…**, **Salvo no app** e **Falha ao salvar**; “Salvo no app” não afirma sincronização com a nuvem
+- Checklist com categorias recolhíveis, progresso por categoria/total, estados Não avaliado/Conforme/Não conforme/N/A com texto e ícone, controles rápidos e filtros Pendentes/Não conformes
+- Fotos em miniatura com legenda e ações existentes; link para registrar anomalia a partir do item reprovado abre a aba e preserva o vínculo, sem criar registros automaticamente
+- Campos do laudo em áreas amplas e resumo antes da assinatura refletindo apenas as confirmações já existentes (itens sem avaliação, ART e nome/assinatura)
+- Ajustes de celular e acessibilidade: abas/filtros/drawer/tabela adaptados, áreas de toque maiores e ausência de rolagem horizontal da página
+- Teste novo `tests/ui-block3.mjs` (8/8) e capturas em `tests/screenshots/block3-*.png`; regressões preservadas em núcleo 16/16, aplicação 22/22 e regras 42/42
+- Nenhuma alteração de backend, credenciais, regras de negócio ou formato dos registros; versão e service worker em 0.21.0
+
 ## 0.20.0 — Dashboard e menu lateral
 - Dashboard reorganizado para priorizar retomada, quatro indicadores principais, vistorias recentes, agenda do dia e pendências antes dos gráficos
 - **Continuar vistoria** em destaque para a vistoria editável mais recente
 - **Não conformidades** saiu dos KPIs e virou um bloco de pendências, com itens reprovados do checklist, itens sem avaliação e anomalias separadas e explicadas
 - Gráficos sem dados exibem orientação curta e ação útil (criar vistoria ou abrir o financeiro), sem dados fictícios
-- Aviso técnico de Firebase removido do dashboard; topo mostra estado discreto de sincronização (Modo local/Sincronizado/Offline) com `title` e `aria-label`
+- Aviso técnico de Firebase removido do dashboard; topo mostra estado discreto de conectividade (Modo local/Online/Offline) com `title` e `aria-label`
 - Menu inicia com Administração recolhida no primeiro acesso e memoriza os grupos em `localStorage` (`vistori_nav_grupos_v1`)
 - Grupo da página atual permanece aberto; item ativo com fundo, borda, barra lateral e marcador; grupo ativo não pode ser recolhido pela própria página
 - Navegação por teclado preservada/ampliada: setas, Home/End, Ctrl+K, Esc devolvendo foco ao botão do menu; menu celular foca o item ativo

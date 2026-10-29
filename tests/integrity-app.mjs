@@ -1,4 +1,4 @@
-// Teste ponta a ponta da integridade (v0.20.0). Rode: node tests/integrity-app.mjs
+// Teste ponta a ponta da integridade (v0.21.0). Rode: node tests/integrity-app.mjs
 // Sobe um servidor local e um Chrome headless usando diretórios dentro de tests/.tmp-app.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -103,9 +103,9 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 
-  await passo('abre a v0.20.0 em modo local', async () => {
+  await passo('abre a v0.21.0 em modo local', async () => {
     await send('Page.navigate', { url: BASE });
-    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.20.0'`, 15000);
+    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.21.0'`, 15000);
     return await ev(`document.querySelector('#ver').textContent`);
   });
 
@@ -182,6 +182,8 @@ const clone = o => JSON.parse(JSON.stringify(o));
     await arquivoBase64('#anom-foto', 'anomalia.png', 'image/png', PNG);
     await ev(`document.querySelector('#anom-form').requestSubmit()`);
     await waitFor(`document.querySelector('.anom-list').innerText.includes('Anomalia de teste')`);
+    await ev(`document.querySelector('[data-aba="documentos"]').click()`);
+    await sleep(200);
     await set('#vdoc-form [name=tipo]', 'ART');
     await set('#vdoc-form [name=nome]', 'ART de teste');
     await arquivoTexto('#vdoc-file', 'art.txt', 'ART de teste');
@@ -192,6 +194,8 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
   await passo('assina com hash v2 e 8 grupos', async () => {
     dialogs.length = 0;
+    await ev(`document.querySelector('[data-aba="laudo"]').click()`);
+    await sleep(250);
     await ev(`HTMLCanvasElement.prototype.setPointerCapture = function(){};
       (() => { const c = document.querySelector('#sig'); const r = c.getBoundingClientRect();
         const p = (t,x,y) => c.dispatchEvent(new PointerEvent(t, { clientX: r.left + x, clientY: r.top + y, pointerId: 1, bubbles: true }));

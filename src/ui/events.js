@@ -11,6 +11,13 @@ import { brl, comprimir, labelReg, sha, uid } from '../core/utils.js';
 import { novaVistoriaDaAgenda } from '../views/agenda.js';
 import { vistoria } from '../views/vistoria.js';
 
+const sinalizarSalvamento = (estado, detalhe = '') => document.dispatchEvent(new CustomEvent('vistori:save', { detail: { estado, detalhe } }));
+async function salvarComStatus(fn) {
+  sinalizarSalvamento('saving');
+  try { await fn(); sinalizarSalvamento('saved'); return true; }
+  catch (err) { sinalizarSalvamento('error', err.message || String(err)); return false; }
+}
+
 app.addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.p !== undefined) {
@@ -26,26 +33,33 @@ app.addEventListener('change', async e => {
   if (t.dataset.anomStatus) {
     if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar anomalias.');
     const a = await get('anomalias', t.dataset.anomStatus);
-    if (a) { await put('anomalias', { ...a, status: t.value }); await auditar('Alterou status de anomalia', 'anomalias', a.id, `${a.titulo} → ${t.value}`); refresh(); }
+    if (a) {
+      const ok = await salvarComStatus(() => put('anomalias', { ...a, status: t.value }));
+      if (ok) { await auditar('Alterou status de anomalia', 'anomalias', a.id, `${a.titulo} → ${t.value}`); refresh(); }
+    }
     return;
   }
   if (!curV) return;
   if (curV.status === 'assinada' && (t.dataset.h || t.dataset.f || t.dataset.photo !== undefined)) return;
-  if (t.dataset.h) { curV[t.dataset.h] = t.value; await put('vistorias', curV); }
-  else if (t.dataset.f) {
+  if (t.dataset.h) {
+    curV[t.dataset.h] = t.value;
+    await salvarComStatus(() => put('vistorias', curV));
+  } else if (t.dataset.f) {
     const it = curV.itens[+t.dataset.i];
     if (t.dataset.f === 'legenda') it.fotos[+t.dataset.j].legenda = t.value; else it[t.dataset.f] = t.value;
     if (t.dataset.f === 'status') t.closest('.item')?.classList.toggle('reprovado', t.value === 'N');
-    await put('vistorias', curV);
+    await salvarComStatus(() => put('vistorias', curV));
   } else if (t.dataset.photo !== undefined) {
     const it = curV.itens[+t.dataset.photo];
-    for (const f of t.files) {
-      const id = uid();
-      await put('fotos', { id, vistoriaId: curV.id, src: await comprimir(f) });
-      it.fotos.push({ id, legenda: '' });
-    }
-    await put('vistorias', curV);
-    const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+    const ok = await salvarComStatus(async () => {
+      for (const f of t.files) {
+        const id = uid();
+        await put('fotos', { id, vistoriaId: curV.id, src: await comprimir(f) });
+        it.fotos.push({ id, legenda: '' });
+      }
+      await put('vistorias', curV);
+    });
+    if (ok) { const y = scrollY; await vistoria(curV.id); scrollTo(0, y); }
   }
 });
 
@@ -90,9 +104,12 @@ document.addEventListener('click', async e => {
     if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar fotos.');
     const [i, j] = d.rm.split(':').map(Number);
     const f = curV.itens[i].fotos[j];
-    if (f.id) await del('fotos', f.id);
-    curV.itens[i].fotos.splice(j, 1); await put('vistorias', curV);
-    const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+    const ok = await salvarComStatus(async () => {
+      if (f.id) await del('fotos', f.id);
+      curV.itens[i].fotos.splice(j, 1);
+      await put('vistorias', curV);
+    });
+    if (ok) { const y = scrollY; await vistoria(curV.id); scrollTo(0, y); }
   } else if (d.marcar) {
     e.preventDefault();
     if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar fotos.');
@@ -102,10 +119,12 @@ document.addEventListener('click', async e => {
     const src = f.src || (f.id ? (await get('fotos', f.id))?.src : '');
     if (!src) return alert('Imagem não encontrada.');
     abrirMarcador(src, async dataUrl => {
-      if (f.id) { const foto = await get('fotos', f.id); if (foto) await put('fotos', { ...foto, src: dataUrl }); }
-      else { f.src = dataUrl; }
-      await put('vistorias', curV);
-      const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
+      const ok = await salvarComStatus(async () => {
+        if (f.id) { const foto = await get('fotos', f.id); if (foto) await put('fotos', { ...foto, src: dataUrl }); }
+        else { f.src = dataUrl; }
+        await put('vistorias', curV);
+      });
+      if (ok) { const y = scrollY; await vistoria(curV.id); scrollTo(0, y); }
     });
   } else if (d.anomItem !== undefined) {
     e.preventDefault();

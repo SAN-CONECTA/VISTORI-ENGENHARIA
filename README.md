@@ -1,6 +1,6 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.20.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.21.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
@@ -38,9 +38,22 @@ Depois de assinar, a tela do laudo mostra **Gerar PDF**, **Baixar PDF** e **Anex
 - A ordem prioriza **vistorias recentes**, **agenda do dia** e **pendências** antes dos gráficos.
 - **Pendências** separa os conceitos: **não conformidades** são itens do checklist marcados como Reprovado/Não conforme; **anomalias** são registros próprios, com gravidade, foto e status. Os totais não se somam.
 - Gráficos sem dados mostram uma orientação curta e uma ação útil (criar vistoria ou abrir o financeiro), sem inventar barras ou valores.
-- O aviso técnico sobre Firebase saiu do dashboard; o topo exibe um indicador discreto e acessível do estado real: **Modo local**, **Sincronizado** ou **Offline**, com explicação no `title`/`aria-label`.
+- O aviso técnico sobre Firebase saiu do dashboard; o topo exibe um indicador discreto e acessível do estado real: **Modo local**, **Online** ou **Offline**, com explicação no `title`/`aria-label`. “Online” significa apenas conexão do navegador; não é confirmação de envio à nuvem.
 - O menu inicia com **Administração recolhida** no primeiro acesso. O estado de cada grupo fica em `localStorage` (`vistori_nav_grupos_v1`); o grupo da página atual é sempre aberto e o item ativo tem destaque reforçado.
 - Busca (`Ctrl+K`), recolhimento geral do menu, atalhos de teclado (setas, Home/End, Esc) e acesso a todos os módulos continuam disponíveis. No celular, o menu abre com foco no item ativo, fecha com Esc e mantém o alternador de tema acessível.
+
+## Listagem e detalhe da vistoria
+
+- **Vistorias** agora usa um botão **Nova vistoria** que abre um painel lateral, em vez de um formulário permanentemente aberto.
+- O painel fecha por botão, **Esc** ou clique no fundo; há confirmação para descartar dados preenchidos e o foco volta ao botão de origem. Os campos e as validações existentes foram preservados.
+- A tabela destaca **Abrir**; **Ver laudo** e **Excluir** ficam no menu **Ações**. A exclusão mantém a confirmação e as regras de laudo assinado já existentes.
+- O detalhe foi organizado em abas: **Dados gerais**, **Checklist**, **Anomalias**, **Documentos** e **Laudo**. A troca de aba não recria os campos, então valores não salvos permanecem na tela.
+- O cabeçalho mostra imóvel, status, cliente, tipo/data e progresso real do checklist.
+- O status de salvamento é explícito: **Alterações pendentes**, **Salvando…**, **Salvo no app** ou **Falha ao salvar**. “Salvo no app” não significa envio confirmado à nuvem; o indicador do topo é apenas **Online/Offline**.
+- O **Checklist** usa seções recolhíveis com progresso por categoria e total calculado dos itens. Cada item diferencia **Não avaliado**, **Conforme/Aprovado**, **Não conforme/Reprovado** e **N/A** com texto e ícone, além de controles rápidos acessíveis.
+- Filtros **Pendentes** e **Não conformes** usam os dados reais; as fotos aparecem como miniaturas com legenda, remover/marcar. O link de anomalia do item reprovado abre a aba **Anomalias**, seleciona o item e **não cria registro automaticamente**.
+- O **Laudo** tem campos amplos e um resumo informativo antes da assinatura: itens sem avaliação, ART não informada, contagem de não conformidades/anomalias e exigência de nome/assinatura. Ele apenas reflete as confirmações já existentes, sem criar novas exigências.
+- Abas, filtros, drawer, tabelas e checklist foram adaptados ao celular, com alvos de toque confortáveis e sem rolagem horizontal da página.
 
 ## Estrutura do código
 
@@ -126,6 +139,7 @@ Testes automatizados do laudo/integridade/PDF (não publicam no Firebase):
 node tests/integrity-core.mjs
 node tests/integrity-app.mjs
 node tests/ui-block2.mjs
+node tests/ui-block3.mjs
 FIREBASE_BIN=/caminho/para/firebase node tests/rules-integrity.mjs
 ```
 As capturas geradas pelo teste de UI ficam em `tests/screenshots/`.

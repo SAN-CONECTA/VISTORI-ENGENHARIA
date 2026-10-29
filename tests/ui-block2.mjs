@@ -1,4 +1,4 @@
-// Teste de UI do dashboard/menu (bloco 2). Rode: node tests/ui-block2.mjs
+// Teste de UI do dashboard/menu (bloco 2, compatível com a v0.21.0). Rode: node tests/ui-block2.mjs
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -120,11 +120,11 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 
-  await passo('abre a v0.20.0 em modo local', async () => {
+  await passo('abre a v0.21.0 em modo local', async () => {
     await send('Page.navigate', { url: BASE });
-    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.20.0'`, 20000);
+    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.21.0'`, 20000);
     await waitFor(`!!document.querySelector('.dashboard-heading')`);
-    return 'v0.20.0';
+    return 'v0.21.0';
   });
 
   await passo('popula dados locais de exemplo para o dashboard', async () => {
@@ -213,7 +213,7 @@ try {
     await ev(`localStorage.removeItem('vistori_nav_grupos_v1'); true`);
     await send('Page.reload', { ignoreCache: false });
     await sleep(1800);
-    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.20.0'`);
+    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.21.0'`);
     await waitFor(`!!document.querySelector('.dashboard-heading')`);
     const inicial = await ev(`(() => {
       const admin = document.querySelector('[data-group="admin"]');
@@ -255,7 +255,7 @@ try {
     if (!fechadoNoDashboard) throw new Error('não foi possível recolher Admin fora da página ativa');
     await send('Page.reload', { ignoreCache: false });
     await sleep(1600);
-    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.20.0'`);
+    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.21.0'`);
     await waitFor(`!!document.querySelector('.dashboard-heading')`);
     const persistido = await ev(`document.querySelector('[data-group="admin"]').classList.contains('is-collapsed')`);
     if (!persistido) throw new Error('preferência recolhida não persistiu após reload');

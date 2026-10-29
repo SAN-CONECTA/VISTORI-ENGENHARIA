@@ -12,12 +12,12 @@ export function userBox() {
   if (sync) {
     sync.classList.toggle('offline', !online && !local);
     sync.classList.toggle('local', local);
-    sync.textContent = local ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
+    sync.textContent = local ? 'Modo local' : online ? 'Online' : 'Offline';
     sync.title = local
-      ? 'Dados salvos somente neste aparelho; não há sincronização.'
+      ? 'Dados salvos somente neste aparelho; não há sincronização com a nuvem.'
       : online
-        ? 'Conectado à nuvem. As alterações são sincronizadas automaticamente.'
-        : 'Sem conexão. As alterações ficam neste aparelho e serão sincronizadas quando a rede voltar.';
+        ? 'Conectado à internet. As alterações são salvas no armazenamento do app; este indicador não confirma o envio à nuvem.'
+        : 'Sem conexão. As alterações ficam neste aparelho e poderão ser sincronizadas quando a rede voltar.';
     sync.setAttribute('aria-label', `${sync.textContent}. ${sync.title}`);
   }
   if (banner) banner.hidden = local || online;
