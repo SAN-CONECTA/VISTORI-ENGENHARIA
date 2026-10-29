@@ -1,4 +1,4 @@
-// Teste ponta a ponta da integridade (v0.19.0). Rode: node tests/integrity-app.mjs
+// Teste ponta a ponta da integridade (v0.20.0). Rode: node tests/integrity-app.mjs
 // Sobe um servidor local e um Chrome headless usando diretórios dentro de tests/.tmp-app.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -103,9 +103,9 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 
-  await passo('abre a v0.19.0 em modo local', async () => {
+  await passo('abre a v0.20.0 em modo local', async () => {
     await send('Page.navigate', { url: BASE });
-    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.19.0'`, 15000);
+    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.20.0'`, 15000);
     return await ev(`document.querySelector('#ver').textContent`);
   });
 

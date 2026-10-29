@@ -16,6 +16,7 @@
   body.nav-open .nav-backdrop{display:block;position:fixed;inset:0;z-index:19;border:0;background:rgba(16,32,33,.48)}
   .nav-toggle{display:block}
   .sidebar-toggle{display:none}
+  #theme-toggle{display:flex}
   .topbar{padding:0 16px}
   main{padding:24px 20px}
   .login-layout{grid-template-columns:1fr}
@@ -26,6 +27,7 @@
   .login-mobile-brand b{color:var(--c-dark);letter-spacing:.08em}
   .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .dashboard-grid{grid-template-columns:1fr}
+  .pending-layout{grid-template-columns:1fr}
 }
 
 @media screen and (max-width:700px){
@@ -35,7 +37,7 @@
   .userbox small{display:none}
   .userbox a{margin-left:0}
   .syncbox{padding:0 9px;font-size:0}
-  .syncbox::after{content:'OK';font-size:.7rem}
+  .syncbox::after{content:'Sync';font-size:.7rem}
   .syncbox.offline::after{content:'Offline'}
   .syncbox.local::after{content:'Local'}
   .offline-banner{padding:9px 14px}
@@ -60,6 +62,12 @@
   .dashboard-heading{flex-direction:column}
   .dashboard-actions{width:100%;justify-content:flex-start}
   .dashboard-actions .btn{flex:1 1 auto}
+  .dashboard-continue{align-items:flex-start;flex-direction:column;gap:8px;padding:15px 16px}
+  .dashboard-continue .continue-copy>span{white-space:normal}
+  .dashboard-continue .continue-action{margin-left:0}
+  .pending-stats{grid-template-columns:1fr}
+  .pending-item{align-items:flex-start;flex-wrap:wrap}
+  .pending-item .status-badge{margin-left:0}
   .agenda-title{align-items:flex-start}
   .agenda-title .btn{width:100%}
   .agenda-filters{grid-template-columns:1fr}
@@ -84,7 +92,8 @@
   #sig{height:140px}
   .kpi-grid{grid-template-columns:1fr}
   .kpi-card{min-height:145px}
-  .dashboard-actions .btn{flex:1 1 100%}
+  .dashboard-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dashboard-actions .btn{width:100%;min-width:0;flex:none}
   .login-panel{padding:24px 18px}
   .login-form-wrap{gap:16px}
   .login-options{align-items:flex-start}

@@ -1,6 +1,6 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.19.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.20.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
@@ -30,6 +30,17 @@ Depois de assinar, a tela do laudo mostra **Gerar PDF**, **Baixar PDF** e **Anex
 - A regra do Firestore permite **apenas criar** esse artefato em vistoria assinada; editar/excluir continua bloqueado até reabrir. A flag `pdfAssinatura` é proibida em vistoria não assinada, para não servir de atalho para excluir documentos do hash.
 - O anexo é limitado pelo tamanho de um documento do Firestore (data URL de até ~750 KB). Laudos com muitas fotos podem ficar maiores: nesse caso o download funciona, mas o app informa que não é possível anexar. Para laudos muito grandes, o PDF pode ser guardado fora do app.
 - O QR Code atual é uma imagem externa: no PDF ele é incluído somente quando consegue ser carregado; offline ele é omitido e o hash continua impresso para conferência.
+
+## Dashboard e menu
+
+- O dashboard mantém quatro indicadores principais: **visitas de hoje**, **vistorias em andamento**, **laudos assinados** e **clientes**.
+- **Continuar vistoria** aparece para a vistoria editável mais recente, quando existe.
+- A ordem prioriza **vistorias recentes**, **agenda do dia** e **pendências** antes dos gráficos.
+- **Pendências** separa os conceitos: **não conformidades** são itens do checklist marcados como Reprovado/Não conforme; **anomalias** são registros próprios, com gravidade, foto e status. Os totais não se somam.
+- Gráficos sem dados mostram uma orientação curta e uma ação útil (criar vistoria ou abrir o financeiro), sem inventar barras ou valores.
+- O aviso técnico sobre Firebase saiu do dashboard; o topo exibe um indicador discreto e acessível do estado real: **Modo local**, **Sincronizado** ou **Offline**, com explicação no `title`/`aria-label`.
+- O menu inicia com **Administração recolhida** no primeiro acesso. O estado de cada grupo fica em `localStorage` (`vistori_nav_grupos_v1`); o grupo da página atual é sempre aberto e o item ativo tem destaque reforçado.
+- Busca (`Ctrl+K`), recolhimento geral do menu, atalhos de teclado (setas, Home/End, Esc) e acesso a todos os módulos continuam disponíveis. No celular, o menu abre com foco no item ativo, fecha com Esc e mantém o alternador de tema acessível.
 
 ## Estrutura do código
 
@@ -114,5 +125,7 @@ Testes automatizados do laudo/integridade/PDF (não publicam no Firebase):
 ```bash
 node tests/integrity-core.mjs
 node tests/integrity-app.mjs
+node tests/ui-block2.mjs
 FIREBASE_BIN=/caminho/para/firebase node tests/rules-integrity.mjs
 ```
+As capturas geradas pelo teste de UI ficam em `tests/screenshots/`.

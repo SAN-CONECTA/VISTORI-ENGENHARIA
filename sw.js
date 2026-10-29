@@ -1,4 +1,4 @@
-const CACHE = 'vistori-0.19.0';
+const CACHE = 'vistori-0.20.0';
 // O app é dividido em módulos em src/. Todos entram no precache: sem isso, a
 // primeira abertura offline (antes de o service worker controlar a página)
 // falharia ao importar um módulo que ainda não está no cache.
@@ -45,7 +45,7 @@ const MODULOS = [
   'src/views/vistorias.js'
 ];
 const SHELL = [
-  './', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.19.0', 'firebase-config.js',
+  './', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.20.0', 'firebase-config.js',
   'manifest.webmanifest', 'logo.png', 'logo-emblema.png', 'icon-192.png', 'icon-512.png',
   'vendor/jspdf.umd.min.js',
   ...MODULOS

@@ -3,7 +3,7 @@ import { CAD } from './core/config.js';
 import { B, setCurV, setPad } from './core/state.js';
 import { $, app, esc, responsiveTables } from './core/dom.js';
 import { setRenderer } from './core/navigate.js';
-import { closeNav } from './ui/chrome.js';
+import { closeNav, sincronizarGruposNav } from './ui/chrome.js';
 import { inicio } from './views/dashboard.js';
 import { agenda } from './views/agenda.js';
 import { cadastros, clientes, cliente, obras, fornecedores, tiposServico, catalogo, precos } from './views/cadastros.js';
@@ -33,11 +33,7 @@ export async function render() {
     a.classList.toggle('on', on);
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  document.querySelectorAll('.nav-group').forEach(g => {
-    const ativo = !!g.querySelector('a.on');
-    g.classList.toggle('has-active', ativo);
-    if (ativo) { g.classList.remove('is-collapsed'); const b = g.querySelector('.nav-group-btn'); if (b) b.setAttribute('aria-expanded', 'true'); }
-  });
+  sincronizarGruposNav();
   const titles = { '': 'Visão geral', agenda: 'Agenda', cadastros: 'Cadastros', clientes: 'Clientes', cliente: 'Ficha do cliente', obras: 'Imóveis e obras', fornecedores: 'Fornecedores', tipos: 'Tipos de serviço', catalogo: 'Catálogo de itens', precos: 'Tabela de preços', vistorias: 'Vistorias', vistoria: 'Detalhe da vistoria', laudo: 'Laudo técnico', orcamentos: 'Orçamentos', orcamento: 'Proposta comercial', financeiro: 'Financeiro', recibo: 'Recibo', checklist: 'Checklist genérico', modelos: 'Modelos de checklist', documentos: 'Documentos', lgpd: 'LGPD e privacidade', usuarios: 'Usuários e acessos', configuracoes: 'Configurações', lixeira: 'Lixeira', auditoria: 'Auditoria', backup: 'Backup' };
   $('#page-title').textContent = titles[r] || 'Visão geral';
   closeNav();

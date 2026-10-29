@@ -8,17 +8,26 @@ export function userBox() {
   const sync = $('#syncbox');
   const banner = $('#offline-banner');
   const online = navigator.onLine;
+  const local = MODO === 'local';
   if (sync) {
-    sync.classList.toggle('offline', !online);
-    sync.classList.toggle('local', MODO === 'local');
-    sync.textContent = MODO === 'local' ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
+    sync.classList.toggle('offline', !online && !local);
+    sync.classList.toggle('local', local);
+    sync.textContent = local ? 'Modo local' : online ? 'Sincronizado' : 'Offline';
+    sync.title = local
+      ? 'Dados salvos somente neste aparelho; não há sincronização.'
+      : online
+        ? 'Conectado à nuvem. As alterações são sincronizadas automaticamente.'
+        : 'Sem conexão. As alterações ficam neste aparelho e serão sincronizadas quando a rede voltar.';
+    sync.setAttribute('aria-label', `${sync.textContent}. ${sync.title}`);
   }
-  if (banner) banner.hidden = MODO === 'local' || online;
-  el.innerHTML = MODO === 'local' ? '<span class="tag">Ambiente de teste</span>'
+  if (banner) banner.hidden = local || online;
+  el.innerHTML = local ? '<span class="tag">Ambiente de teste</span>'
     : USER ? `<small>${esc(USER.email)}</small>${MODO === 'nuvem' ? '<a href="#" id="sair">Sair</a>' : ''}` : '';
 }
 addEventListener('online', userBox);
 addEventListener('offline', userBox);
+addEventListener('focus', userBox);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) userBox(); });
 
 const nav = $('#nav');
 const navToggle = $('#nav-toggle');
@@ -50,11 +59,53 @@ if (sidebarToggle) sidebarToggle.addEventListener('click', () => {
   syncSidebar();
 });
 
+/* ---------- grupos do menu: preferência por usuário ---------- */
+const GRUPOS_KEY = 'vistori_nav_grupos_v1';
+const GRUPOS_PADRAO = { operacoes: true, comercial: true, admin: false };
+function lerGrupos() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(GRUPOS_KEY) || 'null');
+    return salvo && typeof salvo === 'object' ? { ...GRUPOS_PADRAO, ...salvo } : { ...GRUPOS_PADRAO };
+  } catch (e) {
+    return { ...GRUPOS_PADRAO };
+  }
+}
+let gruposAbertos = lerGrupos();
+function salvarGrupos() {
+  try { localStorage.setItem(GRUPOS_KEY, JSON.stringify(gruposAbertos)); } catch (e) {}
+}
+
+/** Aplica as preferências e mantém o grupo da página atual aberto. */
+export function sincronizarGruposNav() {
+  let mudou = false;
+  document.querySelectorAll('.nav-group').forEach(g => {
+    const chave = g.dataset.group || '';
+    const ativo = !!g.querySelector('a.on');
+    g.classList.toggle('has-active', ativo);
+    const aberto = ativo || gruposAbertos[chave] !== false;
+    g.classList.toggle('is-collapsed', !aberto);
+    const btn = g.querySelector('.nav-group-btn');
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(aberto));
+      btn.title = ativo ? 'Grupo da página atual' : '';
+    }
+    // Ao entrar em uma página, o grupo dela passa a ser uma preferência aberta.
+    if (ativo && gruposAbertos[chave] !== true) { gruposAbertos[chave] = true; mudou = true; }
+  });
+  if (mudou) salvarGrupos();
+}
+sincronizarGruposNav();
+
 document.querySelectorAll('.nav-group-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const g = btn.closest('.nav-group');
+    const chave = g.dataset.group || '';
+    // O grupo da página atual permanece aberto; para recolhê-lo, saia da página.
+    if (g.classList.contains('has-active') && !g.classList.contains('is-collapsed')) return;
     const fechado = g.classList.toggle('is-collapsed');
     btn.setAttribute('aria-expanded', String(!fechado));
+    gruposAbertos[chave] = !fechado;
+    salvarGrupos();
   });
 });
 
@@ -99,11 +150,20 @@ navToggle.addEventListener('click', () => {
   document.body.classList.toggle('nav-open', open);
   navToggle.setAttribute('aria-expanded', String(open));
   navToggle.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
+  if (open) {
+    const alvo = nav.querySelector('a.on') || nav.querySelector('a');
+    setTimeout(() => alvo?.focus({ preventScroll: true }), 0);
+  }
 });
 nav.addEventListener('click', e => { if (e.target.closest('a')) closeNav(); });
-navBackdrop.addEventListener('click', closeNav);
+navBackdrop.addEventListener('click', () => { closeNav(); navToggle.focus(); });
 addEventListener('resize', () => { if (innerWidth > 900) closeNav(); });
-addEventListener('keydown', e => { if (e.key === 'Escape' && !document.body.classList.contains('cmdk-open')) closeNav(); });
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || document.body.classList.contains('cmdk-open')) return;
+  const estavaAberto = sidebar.classList.contains('open');
+  closeNav();
+  if (estavaAberto) navToggle.focus();
+});
 
 /* ---------- busca de módulos (Ctrl+K) ---------- */
 (function initCmdk() {

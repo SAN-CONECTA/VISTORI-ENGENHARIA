@@ -3,6 +3,19 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.20.0 — Dashboard e menu lateral
+- Dashboard reorganizado para priorizar retomada, quatro indicadores principais, vistorias recentes, agenda do dia e pendências antes dos gráficos
+- **Continuar vistoria** em destaque para a vistoria editável mais recente
+- **Não conformidades** saiu dos KPIs e virou um bloco de pendências, com itens reprovados do checklist, itens sem avaliação e anomalias separadas e explicadas
+- Gráficos sem dados exibem orientação curta e ação útil (criar vistoria ou abrir o financeiro), sem dados fictícios
+- Aviso técnico de Firebase removido do dashboard; topo mostra estado discreto de sincronização (Modo local/Sincronizado/Offline) com `title` e `aria-label`
+- Menu inicia com Administração recolhida no primeiro acesso e memoriza os grupos em `localStorage` (`vistori_nav_grupos_v1`)
+- Grupo da página atual permanece aberto; item ativo com fundo, borda, barra lateral e marcador; grupo ativo não pode ser recolhido pela própria página
+- Navegação por teclado preservada/ampliada: setas, Home/End, Ctrl+K, Esc devolvendo foco ao botão do menu; menu celular foca o item ativo
+- Alternador de tema passa a ficar disponível no menu do celular
+- Novo teste de UI `tests/ui-block2.mjs` (10/10) com dados locais e capturas reais em `tests/screenshots/` para desktop/celular, claro/escuro e estado vazio
+- Nenhuma alteração de backend, credenciais ou armazenamento dos registros; versão e service worker em 0.20.0
+
 ## 0.19.0 — Geração e anexo automático do PDF do laudo
 - Novo `src/core/pdf.js` gera o laudo em PDF no navegador com jsPDF 2.5.1 vendorizado em `vendor/jspdf.umd.min.js` (MIT, sem npm), compatível com GitHub Pages e offline
 - A tela de laudo assinado ganha **Gerar PDF**, **Baixar PDF** e **Anexar PDF ao laudo**; a opção **Imprimir / Salvar PDF** do navegador é preservada
