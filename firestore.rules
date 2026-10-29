@@ -115,6 +115,8 @@ service cloud.firestore {
 
     // ---------- Fotos, anomalias e documentos ----------
     // Leitura livre para autorizados; escrita somente na vistoria aberta.
+    // Conteúdo vinculado a vistoria assinada é imutável: o único caminho para
+    // editar é reabrir formalmente a vistoria (gerando nova versão/histórico).
     match /fotos/{id} {
       allow read: if autorizado();
       allow create: if autorizado() && registroEditavel(request.resource.data);

@@ -3,6 +3,17 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.18.0 — Integridade ampliada do laudo
+- Hash v2 agrupa e cobre: dados da vistoria, dados específicos do imóvel, observações gerais, modelo de checklist, itens/status/observações, fotos dos itens, anomalias e documentos vinculados
+- A assinatura guarda `hashVersao: 2`, o hash final e um hash por grupo; a verificação informa quais grupos foram alterados
+- Ciência do cliente, número/versão do laudo, imagem da assinatura e metadados pós-assinatura continuam fora do hash
+- A assinatura carrega anomalias e documentos do banco antes de calcular o hash; se não for possível carregar, a assinatura não é concluída
+- Reabertura verifica a integridade antes de arquivar e guarda em `versoes` a assinatura anterior, um snapshot da vistoria e hashes das anomalias/documentos/fotos (sem duplicar binários grandes)
+- Interface bloqueia alteração de anomalias, documentos e fotos em vistoria assinada até a reabertura
+- Hashes antigos continuam verificáveis pelos cálculos legados; eles não cobrem anomalias/documentos
+- Comentários das regras reforçam a imutabilidade do conteúdo vinculado a laudo assinado; publicação manual continua necessária
+- Versão e service worker atualizados para 0.18.0
+
 ## 0.17.1 — Administração de modelos restrita a administradores
 - Removida das regras do Firestore a exceção que permitia a qualquer usuário autorizado criar o modelo padrão `mdl-recebimento-casa-nova`
 - `getModelos()` não grava mais automaticamente: o modelo padrão é criado apenas pela ação **Criar/Restaurar modelo padrão** na tela de modelos

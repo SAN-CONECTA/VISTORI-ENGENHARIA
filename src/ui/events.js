@@ -2,13 +2,12 @@
 import { auditar } from '../core/auditoria.js';
 import { all, del, get, put } from '../core/db/index.js';
 import { $, abrirMarcador, app } from '../core/dom.js';
-import { fotosSha } from '../core/fotos.js';
-import { calcHash, proximoNumeroLaudo } from '../core/laudo.js';
+import { calcularIntegridade, proximoNumeroLaudo, verificarIntegridade } from '../core/laudo.js';
 import { excluirLixeira } from '../core/lixeira.js';
 import { migrarLocal } from '../core/migracao.js';
 import { refresh } from '../core/navigate.js';
 import { F, USER, auth, curV, pad } from '../core/state.js';
-import { brl, comprimir, labelReg, uid } from '../core/utils.js';
+import { brl, comprimir, labelReg, sha, uid } from '../core/utils.js';
 import { novaVistoriaDaAgenda } from '../views/agenda.js';
 import { vistoria } from '../views/vistoria.js';
 
@@ -24,8 +23,14 @@ app.addEventListener('change', async e => {
     }
     return;
   }
-  if (t.dataset.anomStatus) { const a = await get('anomalias', t.dataset.anomStatus); if (a) { await put('anomalias', { ...a, status: t.value }); await auditar('Alterou status de anomalia', 'anomalias', a.id, `${a.titulo} → ${t.value}`); refresh(); } return; }
+  if (t.dataset.anomStatus) {
+    if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar anomalias.');
+    const a = await get('anomalias', t.dataset.anomStatus);
+    if (a) { await put('anomalias', { ...a, status: t.value }); await auditar('Alterou status de anomalia', 'anomalias', a.id, `${a.titulo} → ${t.value}`); refresh(); }
+    return;
+  }
   if (!curV) return;
+  if (curV.status === 'assinada' && (t.dataset.h || t.dataset.f || t.dataset.photo !== undefined)) return;
   if (t.dataset.h) { curV[t.dataset.h] = t.value; await put('vistorias', curV); }
   else if (t.dataset.f) {
     const it = curV.itens[+t.dataset.i];
@@ -61,6 +66,14 @@ document.addEventListener('click', async e => {
       const v = await get('vistorias', id);
       if (v?.status === 'assinada') return alert('Laudos assinados não podem ser excluídos. Reabra o laudo antes de excluir.');
     }
+    if (s === 'anomalias' || s === 'documentos') {
+      const rec = await get(s, id);
+      const vid = rec?.vistoriaId;
+      if (vid) {
+        const v = await get('vistorias', vid);
+        if (v?.status === 'assinada') return alert('Conteúdo de laudo assinado protegido. Reabra a vistoria para alterar.');
+      }
+    }
     if (confirm('Mover para a lixeira? Você poderá restaurar depois.')) {
       const rec = await get(s, id);
       if (!rec) return;
@@ -74,6 +87,7 @@ document.addEventListener('click', async e => {
     }
   } else if (d.rm) {
     e.preventDefault();
+    if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar fotos.');
     const [i, j] = d.rm.split(':').map(Number);
     const f = curV.itens[i].fotos[j];
     if (f.id) await del('fotos', f.id);
@@ -81,6 +95,7 @@ document.addEventListener('click', async e => {
     const y = scrollY; await vistoria(curV.id); scrollTo(0, y);
   } else if (d.marcar) {
     e.preventDefault();
+    if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para alterar fotos.');
     const [i, j] = d.marcar.split(':').map(Number);
     const f = curV.itens[i]?.fotos[j];
     if (!f) return;
@@ -94,6 +109,7 @@ document.addEventListener('click', async e => {
     });
   } else if (d.anomItem !== undefined) {
     e.preventDefault();
+    if (curV?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para registrar anomalias.');
     const sel = document.querySelector('#anom-form [name=item]');
     if (!sel) return;
     sel.value = d.anomItem;
@@ -140,10 +156,38 @@ document.addEventListener('click', async e => {
     document.body.appendChild(link); link.click(); link.remove();
   } else if (d.reopen) {
     e.preventDefault();
+    if (!curV.assinatura) return;
     const just = prompt('Justificativa para reabrir o laudo (mínimo 10 caracteres):');
     if (just === null) return;
     if (just.trim().length < 10) return alert('Justificativa muito curta (mín. 10 caracteres).');
-    if (curV.assinatura) await put('versoes', { id: uid(), vistoriaId: curV.id, numeroLaudo: curV.numeroLaudo || '', versao: curV.versao || 1, assinatura: curV.assinatura, reabertoEm: new Date().toISOString(), justificativa: just.trim(), criado: new Date().toISOString() });
+    let integ;
+    try { integ = await verificarIntegridade(curV, curV.assinatura); }
+    catch (e) { integ = { ok: false, formato: 'erro', labels: [] }; }
+    const grupos = integ.labels?.length ? ` Grupos alterados: ${integ.labels.join(', ')}.` : '';
+    if (!integ.ok && !confirm(`A verificação de integridade falhou.${grupos} Reabrir mesmo assim?`)) return;
+    try {
+      const [todasAnomalias, todosDocumentos, todasFotos] = await Promise.all([all('anomalias'), all('documentos'), all('fotos')]);
+      const minhasAnomalias = todasAnomalias.filter(a => a.vistoriaId === curV.id);
+      const meusDocumentos = todosDocumentos.filter(d => d.vistoriaId === curV.id);
+      const minhasFotos = todasFotos.filter(f => f.vistoriaId === curV.id);
+      const { assinatura, ...conteudo } = curV;
+      const anomalias = await Promise.all(minhasAnomalias.map(async a => {
+        const { foto, ...resto } = a;
+        return { ...resto, fotoSha: foto ? await sha(foto) : '' };
+      }));
+      const documentos = await Promise.all(meusDocumentos.map(async d => {
+        const { src, ...resto } = d;
+        return { ...resto, srcSha: src ? await sha(src) : '' };
+      }));
+      const fotos = await Promise.all(minhasFotos.map(async f => ({ id: f.id, vistoriaId: f.vistoriaId, srcSha: await sha(f.src || '') })));
+      await put('versoes', {
+        id: uid(), vistoriaId: curV.id, numeroLaudo: curV.numeroLaudo || '', versao: curV.versao || 1,
+        assinatura, vistoria: conteudo, anomalias, documentos, fotos,
+        reabertoEm: new Date().toISOString(), justificativa: just.trim(), criado: new Date().toISOString()
+      });
+    } catch (err) {
+      return alert('Não foi possível arquivar a versão anterior: ' + (err.message || err));
+    }
     delete curV.assinatura;
     curV.status = 'rascunho';
     curV.versao = (curV.versao || 1) + 1;
@@ -161,22 +205,30 @@ document.addEventListener('click', async e => {
     refresh();
   } else if (a.id === 'verif') {
     const v = await get('vistorias', d.id);
-    if (!v.assinatura.fotosSha) return alert('Assinatura feita antes da v0.3.0: a verificação automática não está disponível para este laudo.');
-    // O segundo cálculo é o formato antigo (incluía número/versão/ciência), para
-    // que laudos assinados antes da correção continuem verificáveis.
-    const sig = v.assinatura;
-    const ok = (await calcHash(v, sig.ts)) === sig.hash
-      || (await calcHash(v, sig.ts, { metadados: true })) === sig.hash;
-    alert(ok ? 'ÍNTEGRO: o conteúdo (textos e fotos) é idêntico ao que foi assinado.' : 'ALTERADO: o conteúdo atual é diferente do que foi assinado.');
+    if (!v.assinatura?.fotosSha) return alert('Assinatura feita antes da v0.3.0: a verificação automática não está disponível para este laudo.');
+    let res;
+    try { res = await verificarIntegridade(v, v.assinatura); }
+    catch (err) { return alert('Não foi possível verificar a integridade agora: ' + (err.message || err)); }
+    if (res.ok) {
+      const nota = res.formato === 'v2' ? '' : ' Formato antigo: o hash cobre vistoria e fotos dos itens; anomalias e documentos não entravam nesta assinatura.';
+      alert('ÍNTEGRO: o conteúdo (textos e fotos) é idêntico ao que foi assinado.' + nota);
+    } else {
+      const grupos = res.labels?.length ? `Grupo(s) alterado(s): ${res.labels.join(', ')}.` : 'O hash geral não confere.';
+      const nota = res.formato === 'legado' ? ' Assinatura em formato antigo: não é possível detalhar o grupo.' : '';
+      alert('ALTERADO: ' + grupos + nota);
+    }
   } else if (a.id === 'sign') {
+    if (curV.status === 'assinada') return alert('Laudo já assinado: reabra a vistoria para assinar uma nova versão.');
     const nome = $('#signNome').value.trim() || (curV.vistoriador || '').trim();
     if (!nome || pad.isEmpty()) return alert('Informe o nome e assine no quadro.');
     const pend = curV.itens.filter(i => !i.status).length;
     if (pend && !confirm(`${pend} item(ns) sem avaliação. Assinar assim mesmo?`)) return;
     if (!curV.artNumero && !confirm('Nº da ART não informado. Assinar assim mesmo?')) return;
     const ts = new Date().toISOString();
-    const hash = await calcHash(curV, ts);
-    curV.assinatura = { nome, img: $('#sig').toDataURL('image/png'), ts, hash, fotosSha: await fotosSha(curV) };
+    let integ;
+    try { integ = await calcularIntegridade(curV, ts); }
+    catch (err) { return alert('Não foi possível calcular a integridade do laudo: ' + (err.message || err)); }
+    curV.assinatura = { nome, img: $('#sig').toDataURL('image/png'), ts, hash: integ.hash, fotosSha: integ.fotosSha, hashVersao: 2, grupos: integ.grupos };
     if (!curV.numeroLaudo) curV.numeroLaudo = await proximoNumeroLaudo();
     curV.versao = curV.versao || 1;
     curV.status = 'assinada';

@@ -8,6 +8,8 @@ export async function fotosMap(v) {
   const m = {}; arr.forEach((x, k) => { if (x) m[ids[k]] = x.src; });
   return m;
 }
+// Este mapa entra no grupo "fotos" da assinatura v2. Fotos de anomalias e
+// imagens de documentos entram nos grupos "anomalias" e "documentos" (laudo.js).
 export async function fotosSha(v) {
   const o = {};
   for (const [i, it] of v.itens.entries()) for (const [j, f] of it.fotos.entries())

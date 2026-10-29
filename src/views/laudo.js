@@ -73,7 +73,7 @@ export async function laudo(id) {
     <h2>7. Recomendações</h2><p>${esc(recomendacoes)}</p>
     <h2>8. Conclusão</h2><p>${esc(conclusao)}</p>
     ${v.cienciaCliente ? `<h3>Ciência do cliente</h3><p>${esc(v.cienciaCliente.nome)} — ${fmt(v.cienciaCliente.em)}</p>` : ''}
-    ${v.assinatura ? `<h3>Responsável técnico</h3><img src="${v.assinatura.img}" alt="assinatura" style="max-width:300px;border-bottom:1px solid #000"><br>${esc(v.assinatura.nome)} — ${fmt(v.assinatura.ts)}<br><small>Integridade (SHA-256):</small><div class="hash">${v.assinatura.hash}</div>` : ''}
+    ${v.assinatura ? `<h3>Responsável técnico</h3><img src="${v.assinatura.img}" alt="assinatura" style="max-width:300px;border-bottom:1px solid #000"><br>${esc(v.assinatura.nome)} — ${fmt(v.assinatura.ts)}<br><small>Integridade (SHA-256, formato v${v.assinatura.hashVersao || 1}):</small><div class="hash">${v.assinatura.hash}</div><small>${v.assinatura.hashVersao === 2 ? 'Cobre vistoria, itens, fotos, anomalias e documentos vinculados.' : 'Formato antigo: cobre vistoria e fotos dos itens; anomalias/documentos não estão incluídos neste hash.'}</small>` : ''}
     ${docs.length ? `<h3>Documentos anexados</h3><ul class="docs">${docs.map(d => `<li><b>${esc(d.tipo)}</b> · ${esc(d.nome)}</li>`).join('')}</ul>` : ''}
     <div class="laudo-qr"><img src="${qrUrl}" alt="QR code de verificação"><small>Verificação: ${esc((v.assinatura?.hash || 'sem assinatura').slice(0, 24))}</small></div>
     ${versoes.length ? `<h3>Histórico de versões</h3><ul class="versoes">${versoes.map(x => `<li>Versão ${x.versao} — reaberta em ${fmt(x.reabertoEm)} — ${esc(x.justificativa)}</li>`).join('')}</ul>` : ''}

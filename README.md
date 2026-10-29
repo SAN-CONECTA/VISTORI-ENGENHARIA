@@ -1,6 +1,6 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.17.1**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.18.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
@@ -11,6 +11,13 @@ Modelos de checklist reutilizáveis (por exemplo, **Recebimento de imóvel — c
 O modelo padrão **não é mais semeado automaticamente**. Em uma base nova, um administrador deve abrir **Modelos de checklist** e usar **“Criar modelo padrão”**. Vistorias e agenda continuam funcionando sem modelo, usando o checklist genérico.
 
 Na nuvem, publique o `firestore.rules` atualizado para liberar a coleção `checklistModelos`; sem isso, as telas de vistorias, agenda e modelos recebem `permission-denied`.
+
+## Integridade do laudo
+- Assinaturas novas (**hash v2**) cobrem: dados da vistoria, itens/status/observações, fotos dos itens, anomalias, documentos, dados específicos do imóvel, observações gerais e modelo de checklist.
+- Ficam fora: ciência do cliente, número/versão do laudo, imagem da assinatura e metadados gravados depois da assinatura.
+- A verificação informa os grupos alterados; assinaturas antigas continuam aceitas no formato legado (que não cobria anomalias/documentos).
+- Depois de assinar, fotos/anomalias/documentos ficam imutáveis até reabrir formalmente a vistoria, gerando uma nova versão com histórico.
+
 
 ## Estrutura do código
 

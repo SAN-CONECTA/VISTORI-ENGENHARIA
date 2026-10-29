@@ -1,7 +1,7 @@
 // GED de documentos.
 import { auditar } from '../core/auditoria.js';
 import { DOC_TIPOS } from '../core/config.js';
-import { all, put } from '../core/db/index.js';
+import { all, get, put } from '../core/db/index.js';
 import { $, app, esc, fieldHtml } from '../core/dom.js';
 import { refresh } from '../core/navigate.js';
 import { comprimir, fmtBytes, lerArquivo, uid } from '../core/utils.js';
@@ -35,9 +35,13 @@ export async function documentos() {
     const d = Object.fromEntries(new FormData(f));
     const file = $('#doc-file')?.files[0];
     if (!file) return alert('Selecione um arquivo.');
+    const [tipoV, idV] = (d.vinculo || '').split(':');
+    if (tipoV === 'vistoria' && idV) {
+      const v = await get('vistorias', idV);
+      if (v?.status === 'assinada') return alert('Laudo assinado: reabra a vistoria para anexar documentos.');
+    }
     const src = file.type.startsWith('image/') ? await comprimir(file) : await lerArquivo(file);
     if (src.length > 750000) return alert('Arquivo muito grande para o armazenamento atual (limite ~700 KB).');
-    const [tipoV, idV] = (d.vinculo || '').split(':');
     const docId = uid();
     await put('documentos', { id: docId, nome: d.nome || file.name, tipo: d.tipo || 'Outro', mime: file.type, tamanho: file.size, src, descricao: d.descricao || '', obraId: tipoV === 'obra' ? idV : '', vistoriaId: tipoV === 'vistoria' ? idV : '', criado: new Date().toISOString() });
     await auditar('Anexou documento', 'documentos', docId, d.nome || file.name);
