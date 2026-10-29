@@ -1,23 +1,35 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.18.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.19.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
-→ Vistoria (modelo de checklist + checklist genérico, fotos) → Assinatura → Laudo em PDF.
+→ Vistoria (modelo de checklist + checklist genérico, fotos) → Assinatura → Laudo em PDF gerado no navegador (com opção de impressão).
 
 Modelos de checklist reutilizáveis (por exemplo, **Recebimento de imóvel — casa nova**) ficam em **Administração → Modelos de checklist**. Somente administradores criam, editam, duplicam, ativam/desativam, restauram ou excluem modelos. O modelo escolhido é copiado para a vistoria na criação: editar o modelo depois não altera vistorias já existentes. O checklist genérico continua disponível em **Checklist**.
 
 O modelo padrão **não é mais semeado automaticamente**. Em uma base nova, um administrador deve abrir **Modelos de checklist** e usar **“Criar modelo padrão”**. Vistorias e agenda continuam funcionando sem modelo, usando o checklist genérico.
 
-Na nuvem, publique o `firestore.rules` atualizado para liberar a coleção `checklistModelos`; sem isso, as telas de vistorias, agenda e modelos recebem `permission-denied`.
+Na nuvem, publique o `firestore.rules` atualizado para liberar a coleção `checklistModelos` e o anexo do PDF em laudo assinado; sem isso, as telas de vistorias, agenda e modelos e o botão de anexar PDF recebem `permission-denied`.
 
 ## Integridade do laudo
 - Assinaturas novas (**hash v2**) cobrem: dados da vistoria, itens/status/observações, fotos dos itens, anomalias, documentos, dados específicos do imóvel, observações gerais e modelo de checklist.
-- Ficam fora: ciência do cliente, número/versão do laudo, imagem da assinatura e metadados gravados depois da assinatura.
+- Ficam fora: ciência do cliente, número/versão do laudo, imagem da assinatura, metadados gravados depois da assinatura e o PDF gerado/anexado após a assinatura (artefato; ver abaixo).
 - A verificação informa os grupos alterados; assinaturas antigas continuam aceitas no formato legado (que não cobria anomalias/documentos).
-- Depois de assinar, fotos/anomalias/documentos ficam imutáveis até reabrir formalmente a vistoria, gerando uma nova versão com histórico.
+- Depois de assinar, fotos/anomalias/documentos comuns ficam imutáveis até reabrir formalmente a vistoria, gerando uma nova versão com histórico. A exceção é o PDF do próprio laudo, que pode ser criado e anexado como artefato pós-assinatura (sem entrar no hash).
 
+## PDF do laudo
+
+Depois de assinar, a tela do laudo mostra **Gerar PDF**, **Baixar PDF** e **Anexar PDF ao laudo**. A impressão do navegador continua disponível.
+
+- O PDF é gerado **no navegador**, sem servidor, com jsPDF vendorizado em `vendor/jspdf.umd.min.js` (MIT, sem npm). O arquivo entra no precache do service worker e funciona offline após a primeira carga.
+- Conteúdo: empresa/logotipo, número e versão, cliente e imóvel, dados específicos da vistoria, modelo de checklist, resumo por categoria, totais de aprovados/reprovados/N/A/não avaliados, não conformidades, anomalias, fotos, documentos, recomendações, conclusão, ciência, assinatura, hash e QR Code quando disponível.
+- Nome seguro: `Vistoria_<numeroLaudo>_<cliente>.pdf` (sem acentos nem caracteres inválidos).
+- **Anexar** grava um documento em `documentos` com `vistoriaId`, tipo `Laudo técnico`, `pdfAssinatura: true`, `hashLaudo` e `versaoLaudo`. Se já existir um PDF para o mesmo hash/versão e a mesma ciência, o app não duplica.
+- O PDF é um **artefato pós-assinatura**: não altera a vistoria nem o hash. O grupo `documentos` do hash v2 ignora somente esse PDF gerado. Um documento comum (inclusive um PDF anexado antes de assinar) continua coberto.
+- A regra do Firestore permite **apenas criar** esse artefato em vistoria assinada; editar/excluir continua bloqueado até reabrir. A flag `pdfAssinatura` é proibida em vistoria não assinada, para não servir de atalho para excluir documentos do hash.
+- O anexo é limitado pelo tamanho de um documento do Firestore (data URL de até ~750 KB). Laudos com muitas fotos podem ficar maiores: nesse caso o download funciona, mas o app informa que não é possível anexar. Para laudos muito grandes, o PDF pode ser guardado fora do app.
+- O QR Code atual é uma imagem externa: no PDF ele é incluído somente quando consegue ser carregado; offline ele é omitido e o hash continua impresso para conferência.
 
 ## Estrutura do código
 
@@ -37,9 +49,10 @@ src/core/         regras e infraestrutura (sem HTML de tela)
   db/local.js     IndexedDB
   db/cloud.js     Firestore (cache offline)
   db/index.js     fachada all/get/put/del
-  docs.js · checklist.js · tipos.js · fotos.js · laudo.js · auditoria.js · lixeira.js · migracao.js
+  docs.js · checklist.js · tipos.js · fotos.js · laudo.js · pdf.js · auditoria.js · lixeira.js · migracao.js
 src/ui/           chrome.js (sidebar, tema, busca) e events.js (eventos delegados)
 src/views/        uma tela por arquivo
+vendor/           jsPDF 2.5.1 UMD (MIT) usado só na geração do PDF
 ```
 
 Três regras para não recriar o acoplamento antigo:
@@ -62,7 +75,7 @@ Fotos ficam no Firestore (documentos próprios) enquanto o projeto estiver no pl
 
 ## Limites conhecidos do MVP
 - Dados na nuvem (Firestore), com cache offline. Mesmo assim, exporte **Backup** de vez em quando.
-- Fotos ocupam documentos do Firestore (cota gratuita de 1 GiB no total); migrar para o Cloud Storage exige o plano Blaze.
+- Fotos e o PDF anexado ocupam documentos do Firestore (cota gratuita de 1 GiB no total); migrar para o Cloud Storage exige o plano Blaze.
 - Sem papéis/permissões por usuário: quem está na lista de `firestore.rules` acessa tudo.
 - Assinatura simples: registra nome, desenho, data/hora do aparelho e hash SHA-256 (textos e fotos). **Não registra IP** (exige servidor) e não tem validade jurídica qualificada.
 - A ART não é emitida aqui: só se registra o número.
@@ -96,3 +109,10 @@ URL: https://san-conecta.github.io/VISTORI-ENGENHARIA/
 python3 -m http.server 8080
 ```
 Abra http://localhost:8080
+
+Testes automatizados do laudo/integridade/PDF (não publicam no Firebase):
+```bash
+node tests/integrity-core.mjs
+node tests/integrity-app.mjs
+FIREBASE_BIN=/caminho/para/firebase node tests/rules-integrity.mjs
+```

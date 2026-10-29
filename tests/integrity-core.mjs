@@ -67,6 +67,23 @@ for (const [label, mudar] of casos) {
   });
 }
 
+// PDF gerado DEPOIS da assinatura: é um artefato, não conteúdo assinado.
+const pdfDoc = {
+  id: 'pdf1', vistoriaId: 'v1', nome: 'Vistoria_VST-1_Cliente.pdf', tipo: 'Laudo técnico',
+  mime: 'application/pdf', src: 'data:application/pdf;base64,JVBERi0=', pdfAssinatura: true, hashLaudo: sig.hash
+};
+setBackend({
+  all: async s => s === 'anomalias' ? anomalias : s === 'documentos' ? [...documentos, pdfDoc] : [],
+  get: async (s, id) => s === 'fotos' ? fotos[id] : undefined,
+  put: async () => {}, del: async () => {}
+});
+ok('PDF do laudo anexado após assinar não altera o hash v2', (await verificarIntegridade(v, sig)).ok);
+setBackend({
+  all: async s => s === 'anomalias' ? anomalias : s === 'documentos' ? documentos : [],
+  get: async (s, id) => s === 'fotos' ? fotos[id] : undefined,
+  put: async () => {}, del: async () => {}
+});
+
 // Compatibilidade com o formato antigo.
 const legadoHash = await calcHash(v, ts);
 const legadoFotos = await fotosSha(v);

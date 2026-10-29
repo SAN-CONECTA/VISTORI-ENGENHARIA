@@ -43,7 +43,7 @@ export async function vistoria(id) {
   app.innerHTML = `<h2>Vistoria — ${esc(obra?.nome)}</h2>
   <p>${esc(cli?.nome)} · ${esc(v.tipo)}${v.hora ? ' · ' + esc(v.hora) : ''}${v.numeroLaudo ? ' · ' + esc(v.numeroLaudo) : ''} · <a href="#/laudo/${v.id}">Ver laudo</a></p>
   ${v.checklistModeloNome ? `<p class="modelo-tag"><b>Modelo de checklist:</b> ${esc(v.checklistModeloNome)} <small>· copiado para esta vistoria</small></p>` : ''}
-  ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}${v.versao ? ' · Versão ' + esc(v.versao) : ''}. <a href="#" data-reopen="1">Reabrir com justificativa</a><br><small>Fotos, anomalias e documentos estão protegidos pela assinatura.</small></div>` : ''}
+  ${locked ? `<div class="warn">Assinada em ${fmt(v.assinatura.ts)}${v.versao ? ' · Versão ' + esc(v.versao) : ''}. <a href="#" data-reopen="1">Reabrir com justificativa</a><br><small>Fotos, anomalias e documentos estão protegidos pela assinatura. O PDF do laudo assinado pode ser gerado e anexado na tela do laudo.</small></div>` : ''}
   <fieldset ${locked ? 'disabled' : ''} style="border:0;padding:0;margin:0">
     <div class="card grid">${hf(v, 'data', 'Data', 'date')}${hf(v, 'hora', 'Horário', 'time')}${hf(v, 'vistoriador', 'Responsável técnico')}${hf(v, 'crea', 'CREA / UF')}${hf(v, 'artNumero', 'Nº da ART (emitida no CREA)')}${hf(v, 'valor', 'Valor do serviço (R$)', 'number')}<div><label>Orientações / contato no local</label><textarea data-h="orientacoes">${esc(v.orientacoes)}</textarea></div></div>
     ${v.checklistModeloId ? `<div class="card"><h3>Dados da vistoria de recebimento</h3><div class="grid">

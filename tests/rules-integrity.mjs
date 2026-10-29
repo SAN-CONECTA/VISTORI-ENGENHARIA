@@ -91,6 +91,21 @@ try {
   await t('comum não exclui anomalia de assinada', 403, () => apagar('anomalias', 'as', user));
   await t('comum não cria documento em assinada', 403, () => criar('documentos', 'ds2', user, { id: 'ds2', vistoriaId: 'vs', nome: 'D' }));
   await t('comum não exclui documento de assinada', 403, () => apagar('documentos', 'ds', user));
+  // PDF gerado depois da assinatura: criação permitida somente com o selo e os
+  // campos do artefato; depois de criado, é imutável enquanto a vistoria estiver assinada.
+  await t('comum cria PDF do laudo em assinada', 200, () => criar('documentos', 'pdfs', user, {
+    id: 'pdfs', vistoriaId: 'vs', nome: 'Vistoria_VST-1_Cliente.pdf', tipo: 'Laudo técnico',
+    mime: 'application/pdf', src: 'data:application/pdf;base64,JVBERi0=', pdfAssinatura: true, hashLaudo: 'h'
+  }));
+  await t('comum não edita PDF do laudo em assinada', 403, () => patch('documentos', 'pdfs', user, { nome: 'outro.pdf' }, '?updateMask.fieldPaths=nome'));
+  await t('comum não exclui PDF do laudo em assinada', 403, () => apagar('documentos', 'pdfs', user));
+  await t('comum não cria PDF do laudo em rascunho', 403, () => criar('documentos', 'pdfd', user, {
+    id: 'pdfd', vistoriaId: 'vd', nome: 'Vistoria_VST-2_Cliente.pdf', tipo: 'Laudo técnico',
+    mime: 'application/pdf', src: 'data:application/pdf;base64,JVBERi0=', pdfAssinatura: true, hashLaudo: 'h'
+  }));
+  await t('comum não usa o selo de PDF em documento comum', 403, () => criar('documentos', 'fake-pdf', user, {
+    id: 'fake-pdf', vistoriaId: 'vd', nome: 'D', pdfAssinatura: true
+  }));
   await t('comum não cria foto em assinada', 403, () => criar('fotos', 'fs2', user, { id: 'fs2', vistoriaId: 'vs', src: 'x' }));
   await t('comum não altera foto de assinada', 403, () => patch('fotos', 'fs', user, { src: 'y' }, '?updateMask.fieldPaths=src'));
   await t('comum não exclui foto de assinada', 403, () => apagar('fotos', 'fs', user));

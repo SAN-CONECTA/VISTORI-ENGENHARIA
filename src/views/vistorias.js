@@ -3,7 +3,7 @@ import { dadosIniciaisRecebimento, getCheck, getModelo, getModelos, snapshotMode
 import { all, get, put } from '../core/db/index.js';
 import { $, app, esc, fieldHtml } from '../core/dom.js';
 import { getTipos } from '../core/tipos.js';
-import { brl, uid } from '../core/utils.js';
+import { brl, dataBR, uid } from '../core/utils.js';
 
 export async function vistorias() {
   const [vs, os, cls, ts, modelos] = await Promise.all([all('vistorias'), all('obras'), all('clientes'), getTipos(), getModelos()]);
@@ -25,8 +25,8 @@ export async function vistorias() {
       <select id="v-periodo"><option value="">Todo o período</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="mes">Este mês</option></select>
     </div>
     <p id="v-count" style="color:var(--subtle);font-size:.82rem;margin:0 0 10px"></p>
-    <table><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Tipo</th><th>Responsável</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="v-tbody">
-    ${vs.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(v => `<tr data-status="${esc(v.status)}" data-tipo="${esc(v.tipo)}" data-data="${esc(v.data)}"><td>${esc(v.data)}${v.hora ? ' ' + esc(v.hora) : ''}</td><td>${esc(om[v.obraId]?.nome || '?')}<br><small>${esc(cm[om[v.obraId]?.clienteId] || '')}</small></td><td>${esc(v.tipo)}${v.checklistModeloNome ? `<br><small>${esc(v.checklistModeloNome)}</small>` : ''}</td><td>${esc(v.vistoriador || '—')}</td><td>${brl(v.valor)}</td><td><span class="status-badge ${v.status === 'assinada' ? 'signed' : 'draft'}">${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</span></td>
+    <table class="responsive-table"><thead><tr><th>Data</th><th>Imóvel/Cliente</th><th>Tipo</th><th>Responsável</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody id="v-tbody">
+    ${vs.sort((a, b) => (b.criado || '').localeCompare(a.criado || '')).map(v => `<tr data-status="${esc(v.status)}" data-tipo="${esc(v.tipo)}" data-data="${esc(v.data)}"><td data-label="Data">${esc(dataBR(v.data))}${v.hora ? ' ' + esc(v.hora) : ''}</td><td data-label="Imóvel/Cliente">${esc(om[v.obraId]?.nome || '?')}<br><small>${esc(cm[om[v.obraId]?.clienteId] || '')}</small></td><td data-label="Tipo">${esc(v.tipo)}${v.checklistModeloNome ? `<br><small>${esc(v.checklistModeloNome)}</small>` : ''}</td><td data-label="Responsável">${esc(v.vistoriador || '—')}</td><td data-label="Valor">${brl(v.valor)}</td><td data-label="Status"><span class="status-badge ${v.status === 'assinada' ? 'signed' : 'draft'}">${v.status === 'assinada' ? 'Assinada' : 'Rascunho'}</span></td>
     <td class="act"><a href="#/vistoria/${v.id}">Abrir</a><a href="#/laudo/${v.id}">Laudo</a><a href="#" data-del="vistorias:${v.id}">Excluir</a></td></tr>`).join('') || '<tr><td colspan="7">Nenhuma vistoria.</td></tr>'}
     <tr id="v-vazio" hidden><td colspan="7">Nenhum registro corresponde aos filtros.</td></tr>
     </tbody></table>

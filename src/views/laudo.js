@@ -1,9 +1,16 @@
 // Laudo técnico imprimível.
+import { auditar } from '../core/auditoria.js';
 import { categoriasDaVistoria, rotulosChecklist } from '../core/checklist.js';
 import { all, get, put } from '../core/db/index.js';
 import { $, app, esc } from '../core/dom.js';
 import { fotosMap } from '../core/fotos.js';
-import { fmt } from '../core/utils.js';
+import { verificarIntegridade } from '../core/laudo.js';
+import { gerarPdfLaudo } from '../core/pdf.js';
+import { dataBR, fmt, uid } from '../core/utils.js';
+
+// O PDF é gerado no navegador e fica em memória até a tela ser trocada. A chave
+// inclui o hash assinado e a ciência: se o laudo mudar, o cache é descartado.
+let pdfCache = null;
 
 export async function laudo(id) {
   const v = await get('vistorias', id);
@@ -44,7 +51,17 @@ export async function laudo(id) {
   const resumo = `Foram avaliados ${itens.length} item(ns) em ${cats.length} categoria(s): ${totais.c} ${nomeC}, ${totais.n} ${nomeN}, ${totais.na} N/A e ${totais.ne} não avaliado(s). ${nc.length ? `Foram identificadas ${nc.length} não conformidade(s), que requerem correção.` : 'Não foram identificadas não conformidades.'}${anomalias.length ? ` Foram registradas ${anomalias.length} anomalia(s) estruturada(s).` : ''}`;
   const fotoItens = itens.filter(i => (i.fotos || []).length);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(`Laudo ${v.numeroLaudo || v.id} | ${emp.razao || 'VISTORI ENGENHARIA'} | ${v.assinatura ? v.assinatura.hash : 'sem assinatura'}`)}`;
-  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button><a class="btn ghost" href="#/vistoria/${v.id}">Voltar à vistoria</a>${v.assinatura ? `<button class="btn ghost" id="verif" data-id="${v.id}">Verificar integridade</button>` : ''}</div>
+  const assinada = v.status === 'assinada' && !!v.assinatura;
+  const cienciaAtual = v.cienciaCliente?.em || '';
+  const pdfAnexado = assinada && docs.some(d => d.pdfAssinatura === true && d.tipo === 'Laudo técnico' && d.hashLaudo === v.assinatura.hash && (d.cienciaEm || '') === cienciaAtual);
+  if (pdfCache && (pdfCache.vistoriaId !== v.id || pdfCache.hash !== v.assinatura?.hash || pdfCache.ciencia !== cienciaAtual)) {
+    try { URL.revokeObjectURL(pdfCache.url); } catch (e) {}
+    pdfCache = null;
+  }
+  const pdfStatusInicial = pdfCache
+    ? `PDF gerado (${pdfCache.paginas} pág., ${Math.round(pdfCache.blob.size / 1024)} KB).`
+    : (pdfAnexado ? 'PDF já anexado ao laudo.' : '');
+  app.innerHTML = `<div class="noprint row"><button class="btn" onclick="print()">Imprimir / Salvar PDF</button>${assinada ? `<button class="btn" id="pdf-gerar">Gerar PDF</button><button class="btn ghost" id="pdf-baixar">Baixar PDF</button><button class="btn ghost" id="pdf-anexar" ${pdfAnexado ? 'disabled' : ''}>${pdfAnexado ? 'PDF anexado' : 'Anexar PDF ao laudo'}</button>` : ''}<a class="btn ghost" href="#/vistoria/${v.id}">Voltar à vistoria</a>${v.assinatura ? `<button class="btn ghost" id="verif" data-id="${v.id}">Verificar integridade</button>` : ''}${assinada ? `<span id="pdf-status" class="pdf-status">${pdfStatusInicial}</span>` : ''}</div>
   ${!v.cienciaCliente ? `<div class="card noprint"><h3>Ciência do cliente</h3><p>Registre a ciência do cliente sobre este laudo.</p><div class="row"><input id="ciencia-nome" placeholder="Nome de quem tomou ciência"><button type="button" class="btn" id="ciencia-btn">Registrar ciência</button></div></div>` : ''}
   <div class="card laudo">
     <img class="laudo-logo" src="${emp.logo || 'logo.png'}" alt="${esc(emp.razao || 'VISTORI ENGENHARIA')}">
@@ -53,7 +70,7 @@ export async function laudo(id) {
     <p class="laudo-num">${v.numeroLaudo ? 'Nº ' + esc(v.numeroLaudo) : 'Nº ainda não atribuído'}${v.versao ? ' · Versão ' + esc(v.versao) : ''}</p>
     ${v.status !== 'assinada' ? '<div class="warn">RASCUNHO — não assinado.</div>' : ''}
     <p><b>Cliente:</b> ${esc(cli?.nome)} ${esc(cli?.documento)}<br><b>Imóvel/Obra:</b> ${esc(obra?.nome)} — ${esc(obra?.endereco)} ${esc(obra?.cidade)}${obra?.uf ? '/' + esc(obra.uf) : ''}<br><b>Modelo de checklist:</b> ${esc(v.checklistModeloNome || 'Checklist genérico')}<br>
-    <b>Data da vistoria:</b> ${esc(v.data)}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
+    <b>Data da vistoria:</b> ${esc(dataBR(v.data))}${v.hora ? ' às ' + esc(v.hora) : ''}<br><b>Responsável técnico:</b> ${esc(v.vistoriador)} — CREA ${esc(v.crea)}<br><b>ART nº:</b> ${esc(v.artNumero) || 'não informada'}</p>
     ${v.checklistModeloId && dadosImovel.length ? `<h3>Dados do imóvel</h3><table class="laudo-dados">${dadosImovel.map(([l, val]) => `<tr><th>${esc(l)}</th><td>${esc(val)}</td></tr>`).join('')}</table>` : ''}
     ${v.observacoesGerais ? `<p><b>Observações gerais:</b> ${esc(v.observacoesGerais)}</p>` : ''}
     <h2>1. Objetivo</h2><p>${esc(objetivo)}</p>
@@ -84,5 +101,74 @@ export async function laudo(id) {
     if (!nome) return alert('Informe o nome de quem tomou ciência.');
     await put('vistorias', { ...v, cienciaCliente: { nome, em: new Date().toISOString() } });
     laudo(v.id);
+  };
+
+  const statusPdf = $('#pdf-status');
+  const setStatusPdf = txt => { if (statusPdf) statusPdf.textContent = txt; };
+  const pdfCtx = { v, obra, cliente: cli, empresa: emp, fotos: fm, anomalias, documentos: docs, qrUrl, objetivo, metodologia, recomendacoes, conclusao, resumo, dadosImovel, categorias: cats, rotulos: rot, catStats, totais, numeroItem };
+  const garantirPdf = async () => {
+    if (pdfCache && pdfCache.vistoriaId === v.id && pdfCache.hash === v.assinatura.hash && pdfCache.ciencia === cienciaAtual) return pdfCache;
+    setStatusPdf('Verificando integridade...');
+    const integ = await verificarIntegridade(v, v.assinatura);
+    if (!integ.ok && !confirm('A verificação de integridade encontrou alterações. Gerar o PDF mesmo assim? O PDF exibirá o conteúdo atual e o hash da assinatura original.')) { setStatusPdf(''); return null; }
+    setStatusPdf('Gerando PDF...');
+    const r = await gerarPdfLaudo(pdfCtx);
+    if (pdfCache?.url) { try { URL.revokeObjectURL(pdfCache.url); } catch (e) {} }
+    pdfCache = { vistoriaId: v.id, hash: v.assinatura.hash, ciencia: cienciaAtual, ...r, url: URL.createObjectURL(r.blob) };
+    setStatusPdf(`PDF gerado (${r.paginas} pág., ${Math.round(r.blob.size / 1024)} KB).`);
+    return pdfCache;
+  };
+  const baixarPdf = async p => {
+    const a = document.createElement('a');
+    a.href = p.url; a.download = p.nome; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  const btnGerar = $('#pdf-gerar');
+  if (btnGerar) btnGerar.onclick = async () => {
+    btnGerar.disabled = true;
+    try { await garantirPdf(); }
+    catch (e) { setStatusPdf(''); alert('Não foi possível gerar o PDF: ' + (e.message || e)); }
+    finally { btnGerar.disabled = false; }
+  };
+  const btnBaixar = $('#pdf-baixar');
+  if (btnBaixar) btnBaixar.onclick = async () => {
+    btnBaixar.disabled = true;
+    try { const p = await garantirPdf(); if (p) await baixarPdf(p); }
+    catch (e) { setStatusPdf(''); alert('Não foi possível baixar o PDF: ' + (e.message || e)); }
+    finally { btnBaixar.disabled = false; }
+  };
+  const btnAnexar = $('#pdf-anexar');
+  let anexandoPdf = false;
+  if (btnAnexar) btnAnexar.onclick = async () => {
+    if (pdfAnexado) return alert('Este PDF já está anexado ao laudo.');
+    if (anexandoPdf) return;
+    anexandoPdf = true;
+    btnAnexar.disabled = true;
+    try {
+      const p = await garantirPdf();
+      if (!p) { btnAnexar.disabled = false; return; }
+      const src = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(p.blob); });
+      if (src.length > 750000) {
+        btnAnexar.disabled = false;
+        return alert('O PDF é grande demais para anexar ao laudo (limite de ~750 KB). Use "Baixar PDF" e guarde o arquivo fora do app.');
+      }
+      const atuais = await all('documentos');
+      const existente = atuais.find(d => d.vistoriaId === v.id && d.pdfAssinatura === true && d.tipo === 'Laudo técnico' && d.hashLaudo === v.assinatura.hash && (d.cienciaEm || '') === cienciaAtual);
+      if (existente) { setStatusPdf('PDF já anexado ao laudo.'); btnAnexar.disabled = true; return alert('Este PDF já está anexado ao laudo.'); }
+      const docId = uid();
+      await put('documentos', {
+        id: docId, nome: p.nome, tipo: 'Laudo técnico', mime: 'application/pdf', tamanho: p.blob.size, src,
+        descricao: `PDF do laudo ${v.numeroLaudo || ''} · versão ${v.versao || 1}`,
+        obraId: obra?.id || '', vistoriaId: v.id, pdfAssinatura: true, hashLaudo: v.assinatura.hash,
+        versaoLaudo: v.versao || 1, cienciaEm: cienciaAtual, criado: new Date().toISOString()
+      });
+      await auditar('Anexou PDF do laudo', 'documentos', docId, p.nome);
+      await laudo(v.id);
+    } catch (e) {
+      btnAnexar.disabled = false;
+      alert('Não foi possível anexar o PDF: ' + (e.message || e));
+    } finally {
+      anexandoPdf = false;
+    }
   };
 }

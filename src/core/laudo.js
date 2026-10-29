@@ -41,7 +41,13 @@ export async function gruposIntegridade(v) {
     all('documentos')
   ]);
   const minhasAnomalias = ordenarPorId(anomalias.filter(a => a.vistoriaId === v.id));
-  const meusDocumentos = ordenarPorId(documentos.filter(d => d.vistoriaId === v.id));
+  // O PDF do laudo é gerado/anexado DEPOIS da assinatura. Ele é um artefato do
+  // laudo assinado, não conteúdo editável: por isso fica fora do grupo de
+  // documentos. Documentos normais (inclusive um PDF anexado antes de assinar)
+  // continuam cobertos. O selo `pdfAssinatura` só pode ser criado em vistoria
+  // assinada (ver firestore.rules), evitando que alguém o use para excluir um
+  // documento comum do hash.
+  const meusDocumentos = ordenarPorId(documentos.filter(d => d.vistoriaId === v.id && !(d.pdfAssinatura === true && d.tipo === 'Laudo técnico')));
   const grupos = {
     vistoria: await sha(canon(baseVistoria(v))),
     imovel: await sha(canon(dadosImovel(v))),

@@ -1,4 +1,4 @@
-// Teste ponta a ponta da integridade (v0.18.0). Rode: node tests/integrity-app.mjs
+// Teste ponta a ponta da integridade (v0.19.0). Rode: node tests/integrity-app.mjs
 // Sobe um servidor local e um Chrome headless usando diretórios dentro de tests/.tmp-app.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -103,9 +103,9 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 
-  await passo('abre a v0.18.0 em modo local', async () => {
+  await passo('abre a v0.19.0 em modo local', async () => {
     await send('Page.navigate', { url: BASE });
-    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.18.0'`, 15000);
+    await waitFor(`document.querySelector('#app') && document.querySelector('#ver')?.textContent === 'v0.19.0'`, 15000);
     return await ev(`document.querySelector('#ver').textContent`);
   });
 
@@ -307,6 +307,44 @@ const clone = o => JSON.parse(JSON.stringify(o));
     return msg.slice(0, 120);
   });
 
+  await passo('gera e baixa PDF do laudo assinado com nome seguro', async () => {
+    if (!(await ev(`!!(window.jspdf && window.jspdf.jsPDF)`))) throw new Error('jsPDF não carregado');
+    if (!(await ev(`!!document.querySelector('#pdf-gerar') && !!document.querySelector('#pdf-baixar') && !!document.querySelector('#pdf-anexar')`))) throw new Error('botões de PDF ausentes');
+    if (!(await ev(`!!document.querySelector('button[onclick="print()"]')`))) throw new Error('botão de impressão removido');
+    await ev(`window.__pdfClickOriginal = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function(){ window.__download = { href: this.href, download: this.download }; };`);
+    await ev(`document.querySelector('#pdf-gerar').click()`);
+    await waitFor(`document.querySelector('#pdf-status')?.textContent.startsWith('PDF gerado')`, 30000);
+    const status = await ev(`document.querySelector('#pdf-status').textContent`);
+    await ev(`document.querySelector('#pdf-baixar').click()`);
+    await waitFor(`!!window.__download`, 15000);
+    const download = await ev(`window.__download.download`);
+    const arquivo = await ev(`(async () => { const r = await fetch(window.__download.href); const b = await r.arrayBuffer(); const u = new Uint8Array(b.slice(0, 5)); return { bytes: b.byteLength, header: String.fromCharCode(...u) }; })()`);
+    await ev(`HTMLAnchorElement.prototype.click = window.__pdfClickOriginal; delete window.__pdfClickOriginal; delete window.__download;`);
+    if (!/^Vistoria_.+_Cliente_Integridade\.pdf$/.test(download)) throw new Error('nome inseguro: ' + download);
+    if (arquivo.header !== '%PDF-' || arquivo.bytes < 1000) throw new Error('arquivo não é um PDF válido: ' + JSON.stringify(arquivo));
+    return `${status} · ${download} · ${arquivo.bytes} bytes`;
+  });
+
+  await passo('anexa PDF ao laudo assinado sem alterar o hash', async () => {
+    const antes = await dbGet('vistorias', vistoriaId);
+    dialogs.length = 0;
+    await ev(`document.querySelector('#pdf-anexar').click()`);
+    await waitFor(`document.querySelector('#pdf-anexar')?.disabled && document.querySelector('#pdf-anexar').textContent.includes('PDF anexado')`, 30000);
+    const pdfs = (await dbAll('documentos')).filter(d => d.vistoriaId === vistoriaId && d.pdfAssinatura === true);
+    if (pdfs.length !== 1) throw new Error('PDFs gerados: ' + pdfs.length);
+    const d = pdfs[0];
+    if (d.tipo !== 'Laudo técnico' || d.mime !== 'application/pdf') throw new Error('tipo/mime incorretos');
+    if (!d.nome.startsWith('Vistoria_') || !d.nome.endsWith('.pdf')) throw new Error('nome do anexo: ' + d.nome);
+    if (!d.src.startsWith('data:application/pdf;base64,')) throw new Error('src do PDF inválido');
+    if (d.hashLaudo !== antes.assinatura.hash || d.versaoLaudo !== antes.versao) throw new Error('vínculo com a versão assinada incorreto');
+    if ((d.cienciaEm || '') !== (antes.cienciaCliente?.em || '')) throw new Error('ciência do PDF não corresponde à do laudo');
+    const depois = await dbGet('vistorias', vistoriaId);
+    if (JSON.stringify(depois) !== JSON.stringify(antes)) throw new Error('a vistoria assinada foi alterada');
+    await verificar('ÍNTEGRO');
+    return `${Math.round(d.tamanho / 1024)} KB · hash estável após o anexo`;
+  });
+
 
   await passo('GED não anexa documento a laudo assinado', async () => {
     await ir('#/documentos');
@@ -344,6 +382,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
     return `v${v.versao} · snapshot ${snap.vistoria.itens.length} itens, ${snap.anomalias.length} anomalia(s), ${snap.documentos.length} documento(s)`;
   });
 
+  let legadoId = '';
   await passo('vistoria antiga (hash legado) continua verificando', async () => {
     await ir('#/vistorias');
     const obra = await ev(`[...document.querySelector('#nv [name=obraId]').options].find(o => o.textContent.includes('Casa Integridade')).value`);
@@ -352,7 +391,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
     await set('#nv [name=modeloId]', '');
     await ev(`document.querySelector('#nv').requestSubmit()`);
     await waitFor(`location.hash.startsWith('#/vistoria/')`);
-    const legadoId = await ev(`location.hash.split('/').pop()`);
+    legadoId = await ev(`location.hash.split('/').pop()`);
     await waitFor(`document.querySelectorAll('.item').length === 17`);
     const info = await ev(`(async () => {
       const v = await new Promise((res, rej) => { const r = indexedDB.open('vistori'); r.onsuccess = () => { const q = r.result.transaction('vistorias').objectStore('vistorias').get(${JSON.stringify(legadoId)}); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }; r.onerror = () => rej(r.error); });
@@ -375,18 +414,24 @@ const clone = o => JSON.parse(JSON.stringify(o));
   });
 
 
-  await passo('shell e tela de vistorias continuam disponíveis offline', async () => {
-    await ir('#/vistorias');
+  await passo('gera PDF de laudo antigo offline e mantém o shell disponível', async () => {
+    if (!legadoId) throw new Error('vistoria antiga não criada');
+    await ir('#/laudo/' + legadoId);
     await sleep(1200);
     const sw = await ev(`navigator.serviceWorker.ready.then(r => !!r.active)`);
     if (!sw) throw new Error('service worker inativo');
     await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
-    await send('Page.reload', { ignoreCache: false });
-    await sleep(3000);
-    const txt = await ev(`document.querySelector('#app')?.innerText || ''`);
-    await send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-    if (!txt.includes('Vistorias')) throw new Error('offline: ' + txt.slice(0, 160));
-    return 'shell 0.18.0 em cache';
+    try {
+      await send('Page.reload', { ignoreCache: false });
+      await sleep(3000);
+      await waitFor(`document.querySelector('.laudo') && !!document.querySelector('#pdf-gerar')`, 15000);
+      await ev(`document.querySelector('#pdf-gerar').click()`);
+      await waitFor(`document.querySelector('#pdf-status')?.textContent.startsWith('PDF gerado')`, 30000);
+      const status = await ev(`document.querySelector('#pdf-status').textContent`);
+      return `legado offline · ${status}`;
+    } finally {
+      await send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    }
   });
 
   check('sem exceções JavaScript', erros.length === 0, erros.join(' | '));

@@ -56,6 +56,20 @@ service cloud.firestore {
       return vistoriaAberta(idVistoria(dados));
     }
 
+    // PDF do laudo: artefato gerado DEPOIS da assinatura e anexado em
+    // /documentos. Não é conteúdo editável e fica fora do grupo "documentos"
+    // do hash v2 (ver src/core/laudo.js). Para evitar que a flag seja usada
+    // para esconder um documento comum do hash, este selo só pode ser criado
+    // quando a vistoria de origem está assinada. O artefato é imutável enquanto
+    // a vistoria estiver assinada (update/delete continuam exigindo vistoriaAberta).
+    function pdfLaudoAssinado(dados) {
+      return dados.keys().hasAny(['tipo']) && dados.tipo == 'Laudo técnico'
+        && dados.keys().hasAny(['pdfAssinatura']) && dados.pdfAssinatura == true
+        && dados.keys().hasAny(['mime']) && dados.mime == 'application/pdf'
+        && dados.keys().hasAny(['src']) && dados.src is string
+        && dados.keys().hasAny(['vistoriaId']) && dados.vistoriaId != '';
+    }
+
     // Reabertura: só permite remover a assinatura, voltar para rascunho e
     // incrementar a versão. Qualquer outro campo alterado bloqueia a operação.
     function reaberturaAutorizada() {
@@ -139,7 +153,18 @@ service cloud.firestore {
 
     match /documentos/{id} {
       allow read: if autorizado();
-      allow create: if autorizado() && registroEditavel(request.resource.data);
+      // Duas formas de criar:
+      // 1) documento comum em vistoria aberta (sem o selo pdfAssinatura);
+      // 2) PDF gerado pelo app em vistoria JÁ ASSINADA, com os campos exigidos.
+      // A segunda forma é só de criação; update/delete continuam bloqueados
+      // enquanto a vistoria estiver assinada.
+      allow create: if autorizado() && (
+        (registroEditavel(request.resource.data)
+          && (!request.resource.data.keys().hasAny(['pdfAssinatura']) || request.resource.data.pdfAssinatura != true))
+        || (pdfLaudoAssinado(request.resource.data)
+          && exists(/databases/$(database)/documents/vistorias/$(request.resource.data.vistoriaId))
+          && get(/databases/$(database)/documents/vistorias/$(request.resource.data.vistoriaId)).data.status == 'assinada')
+      );
       allow update: if autorizado()
         && idVistoria(request.resource.data) == idVistoria(resource.data)
         && registroEditavel(resource.data)

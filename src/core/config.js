@@ -1,6 +1,6 @@
 // Constantes e configuração de execução (versão, modo, coleções e enums).
 
-export const VERSION = '0.18.0';
+export const VERSION = '0.19.0';
 // Deve espelhar os e-mails bootstrap de firestore.rules.
 export const ADMIN_EMAILS = ['sandro@santecnologia.com', 'victoriarochaeng@hotmail.com', 'sandro@sanconecta.com'];
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)
@@ -17,7 +17,7 @@ export const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 
 export const UNIDADES = ['un', 'h', 'm²', 'km', 'visita'];
 export const GRAV = ['Baixa', 'Média', 'Alta', 'Crítica'];
 export const PRAZOS = ['Imediato', '15 dias', '30 dias', '60 dias', '90 dias'];
-export const DOC_TIPOS = ['ART', 'Planta', 'Contrato', 'Proposta', 'Foto', 'Outro'];
+export const DOC_TIPOS = ['ART', 'Planta', 'Contrato', 'Proposta', 'Foto', 'Laudo técnico', 'Outro'];
 export const STORE_LABEL = { clientes: 'Cliente', obras: 'Imóvel/Obra', vistorias: 'Vistoria', versoes: 'Versão', anomalias: 'Anomalia', documentos: 'Documento', agendamentos: 'Agendamento', orcamentos: 'Orçamento', recebimentos: 'Recebimento', acessos: 'Acesso', tipos: 'Tipo de serviço', fornecedores: 'Fornecedor', catalogo: 'Catálogo', precos: 'Preço', fotos: 'Foto', config: 'Configuração', checklistModelos: 'Modelo de checklist' };
 export const CAD = ['cadastros', 'clientes', 'obras', 'fornecedores', 'tipos', 'catalogo', 'precos'];
 export const ST = { '': '— avaliar —', C: 'Conforme', N: 'Não conforme', NA: 'N/A' };

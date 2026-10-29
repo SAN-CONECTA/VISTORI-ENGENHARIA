@@ -3,6 +3,21 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.19.0 — Geração e anexo automático do PDF do laudo
+- Novo `src/core/pdf.js` gera o laudo em PDF no navegador com jsPDF 2.5.1 vendorizado em `vendor/jspdf.umd.min.js` (MIT, sem npm), compatível com GitHub Pages e offline
+- A tela de laudo assinado ganha **Gerar PDF**, **Baixar PDF** e **Anexar PDF ao laudo**; a opção **Imprimir / Salvar PDF** do navegador é preservada
+- O PDF inclui empresa/logotipo, número e versão, cliente e imóvel, dados específicos da vistoria, modelo de checklist, resumo por categoria, totais de aprovados/reprovados/N/A/não avaliados, não conformidades, anomalias, fotos, documentos, recomendações, conclusão, ciência do cliente, assinatura, hash e QR Code quando disponível
+- Nome de arquivo seguro no padrão `Vistoria_<numeroLaudo>_<cliente>.pdf`, sem acentos ou caracteres inválidos
+- Anexar grava em `documentos` com `vistoriaId`, tipo `Laudo técnico`, `mime: application/pdf`, `pdfAssinatura: true`, `hashLaudo`, `versaoLaudo` e `cienciaEm`; o PDF é vinculado à versão assinada
+- O app evita duplicar o mesmo PDF (mesmo hash/versão e mesma ciência) e bloqueia nova anexação concorrente
+- O PDF gerado é um artefato **pós-assinatura**: fica fora do grupo `documentos` do hash v2; documentos comuns continuam cobertos. Hashes v1 e v2 existentes continuam verificáveis
+- A regra do Firestore permite somente a **criação** do artefato em vistoria assinada; editar/excluir continua bloqueado. O selo `pdfAssinatura` é proibido em vistoria não assinada para não excluir documentos comuns do hash
+- O anexo respeita o limite de documento do Firestore (~750 KB de data URL). PDFs maiores continuam disponíveis para download, mas não são anexados; a mensagem explica o limite
+- O QR Code continua sendo uma imagem externa: no PDF é incluído quando carrega; offline é omitido e o hash permanece impresso
+- jsPDF, `src/core/pdf.js` e a nova versão entram no precache do service worker; geração de PDF foi testada offline
+- Testes atualizados: núcleo 16/16, aplicação 22/22 (inclui PDF válido, download, anexação, hash estável, laudo antigo e offline) e regras 42/42
+- Versão e service worker atualizados para 0.19.0; **publique `firestore.rules` manualmente** para o anexo funcionar na nuvem
+
 ## 0.18.0 — Integridade ampliada do laudo
 - Hash v2 agrupa e cobre: dados da vistoria, dados específicos do imóvel, observações gerais, modelo de checklist, itens/status/observações, fotos dos itens, anomalias e documentos vinculados
 - A assinatura guarda `hashVersao: 2`, o hash final e um hash por grupo; a verificação informa quais grupos foram alterados
