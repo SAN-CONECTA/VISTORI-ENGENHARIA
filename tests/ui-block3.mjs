@@ -64,9 +64,9 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 
-  await passo('abre v0.21.0 e popula dados locais', async () => {
+  await passo('abre v0.22.0 e popula dados locais', async () => {
     await send('Page.navigate', { url: BASE });
-    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.21.0'`, 20000);
+    await waitFor(`document.querySelector('#ver')?.textContent === 'v0.22.0'`, 20000);
     const r = await ev(`(async () => {
       const db = await import('/src/core/db/index.js');
       const now = new Date(); const pad = n => String(n).padStart(2, '0');

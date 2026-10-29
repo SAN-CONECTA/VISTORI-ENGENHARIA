@@ -130,7 +130,7 @@ export async function vistoria(id) {
       <div class="vistoria-head-side">
         <span class="status-badge ${badgeStatus(v.status)}">${labelStatusVistoria(v.status)}</span>
         <span id="save-status" class="save-status" data-estado="${locked ? 'locked' : 'saved'}" role="status" aria-live="polite">${locked ? 'Somente leitura — assinada' : 'Sem alterações pendentes'}</span>
-        <div class="vistoria-actions"><a class="btn btn-sm ghost" href="#/laudo/${v.id}">Ver laudo</a><a class="btn btn-sm ghost" href="#/vistorias">Voltar</a></div>
+        <div class="vistoria-actions"><a class="btn btn-sm ghost" href="#/piloto">Piloto visual</a><a class="btn btn-sm ghost" href="#/laudo/${v.id}">Ver laudo</a><a class="btn btn-sm ghost" href="#/vistorias">Voltar</a></div>
       </div>
     </div>
     <div class="progress-block">

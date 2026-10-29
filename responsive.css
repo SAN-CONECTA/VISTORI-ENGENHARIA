@@ -90,6 +90,7 @@
   .pending-item .status-badge{margin-left:0}
   .agenda-title{align-items:flex-start}
   .agenda-title .btn{width:100%}
+  .agenda-overview{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .agenda-filters{grid-template-columns:1fr}
   .client-head{align-items:flex-start}
   .client-head .btn{width:100%}
@@ -111,6 +112,11 @@
   .fotos{grid-template-columns:1fr}
   #sig{height:140px}
   .kpi-grid{grid-template-columns:1fr}
+  .agenda-overview{grid-template-columns:1fr}
+  .agenda-task{grid-template-columns:10px minmax(0,1fr) auto;gap:8px;padding:12px 2px}
+  .agenda-task .status-badge{grid-column:2;justify-self:start}
+  .agenda-task-time{grid-column:3;grid-row:1 / span 2}
+  .agenda-task-actions{grid-column:2 / -1;display:flex;flex-wrap:wrap;gap:8px;padding-top:2px}
   .kpi-card{min-height:145px}
   .dashboard-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .dashboard-actions .btn{width:100%;min-width:0;flex:none}

@@ -1,6 +1,6 @@
 // Constantes e configuração de execução (versão, modo, coleções e enums).
 
-export const VERSION = '0.21.0';
+export const VERSION = '0.22.0';
 // Deve espelhar os e-mails bootstrap de firestore.rules.
 export const ADMIN_EMAILS = ['sandro@santecnologia.com', 'victoriarochaeng@hotmail.com', 'sandro@sanconecta.com'];
 /* Modos: 'nuvem' (padrão: Firebase + login) | 'local' (só este aparelho, para testes)

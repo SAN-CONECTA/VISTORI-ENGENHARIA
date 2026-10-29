@@ -1,4 +1,4 @@
-const CACHE = 'vistori-0.21.0';
+const CACHE = 'vistori-0.22.0-agenda-visual';
 // O app é dividido em módulos em src/. Todos entram no precache: sem isso, a
 // primeira abertura offline (antes de o service worker controlar a página)
 // falharia ao importar um módulo que ainda não está no cache.
@@ -40,12 +40,13 @@ const MODULOS = [
   'src/views/login.js',
   'src/views/modelos.js',
   'src/views/orcamentos.js',
+  'src/views/piloto.js',
   'src/views/usuarios.js',
   'src/views/vistoria.js',
   'src/views/vistorias.js'
 ];
 const SHELL = [
-  './', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.21.0', 'firebase-config.js',
+  './', 'index.html', 'style.css', 'responsive.css', 'app.js?v=0.22.0', 'firebase-config.js',
   'manifest.webmanifest', 'logo.png', 'logo-emblema.png', 'icon-192.png', 'icon-512.png',
   'vendor/jspdf.umd.min.js',
   ...MODULOS

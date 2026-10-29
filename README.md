@@ -1,6 +1,6 @@
 # VISTORI-ENGENHARIA
 
-Sistema de vistorias e laudos de engenharia. **v0.21.0**, uso interno (não é SaaS).
+Sistema de vistorias e laudos de engenharia. **v0.22.0**, uso interno (não é SaaS).
 
 ## O que já faz
 Cadastros (clientes PF/PJ, imóveis/obras, fornecedores e empreiteiros, tipos de serviço, tabela de preços, catálogo)
@@ -134,12 +134,21 @@ python3 -m http.server 8080
 ```
 Abra http://localhost:8080
 
+## Piloto visual isolado (v0.22.0)
+
+A rota local **`#/piloto`** abre uma bancada de inspeção com dados fictícios mantidos apenas em memória. Ela não lê nem grava vistorias reais, não cria anomalias e não assina laudos. O link **Piloto visual** aparece no cabeçalho do detalhe de uma vistoria; o próprio piloto tem **Tela atual** para voltar à lista existente.
+
+O piloto inclui índice de categorias com contadores, avaliação/observações do item, navegação anterior/próximo e próximo pendente, painel recolhível de evidências com miniatura, ampliação, legenda, marcação e anexo local, além de uma revisão final que separa impedimentos reais de assinatura de avisos confirmáveis e informações. Em larguras confortáveis usa três colunas; em tablet, duas; no celular, uma, com seletor de categoria e ações no fluxo da página.
+
+As capturas do piloto estão em `tests/screenshots/piloto-*.png`. A assinatura real continua exclusivamente na tela atual da vistoria, com as regras e proteções existentes.
+
 Testes automatizados do laudo/integridade/PDF (não publicam no Firebase):
 ```bash
 node tests/integrity-core.mjs
 node tests/integrity-app.mjs
 node tests/ui-block2.mjs
 node tests/ui-block3.mjs
+node tests/ui-piloto.mjs
 FIREBASE_BIN=/caminho/para/firebase node tests/rules-integrity.mjs
 ```
 As capturas geradas pelo teste de UI ficam em `tests/screenshots/`.

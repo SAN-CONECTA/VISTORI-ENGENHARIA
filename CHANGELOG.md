@@ -3,6 +3,18 @@
 Versionamento: `MAIOR.MENOR.CORREÇÃO`. A versão `1.0.0` só sai quando um vistoriador real
 fechar um laudo de ponta a ponta no sistema.
 
+## 0.22.0 — Piloto de inspeção, evidências e revisão
+- Nova rota local **`#/piloto`** com bancada de inspeção isolada e dados fictícios em memória; nenhum acesso de leitura/escrita às vistorias reais, nenhuma criação automática de anomalia e nenhuma assinatura
+- Cabeçalho compacto com imóvel, cliente, status de demonstração, progresso real e atalhos para **Dados gerais**, **Documentos**, **Laudo** e **Revisão final**; link **Piloto visual** no detalhe atual e **Tela atual** no piloto
+- Índice de categorias com contadores de conformes, não conformes, N/A e pendentes; item com avaliação, observações, anterior/próximo, **Próximo pendente**, navegação sem perder preenchimento, seleção ou posição de rolagem
+- Evidências recolhíveis por item: miniaturas, ampliação em lightbox com contexto, legenda editável, marcação pela ação existente, anexo local e fallback para imagem indisponível; item, observação e anomalia vinculada aparecem juntos, com distinção entre **item não conforme** e **registro de anomalia**
+- Revisão final reúne itens sem avaliação, não conformidades, anomalias e ART ausente; avisos confirmáveis, informações e impedimentos reais de nome/assinatura são visualmente distintos e levam ao item, campo de ART ou tela atual
+- Layout de três colunas apenas em largura confortável, duas em tablet e uma no celular, com seletor de categoria, alvos de toque confortáveis, foco visível, navegação por teclado e ações no fluxo (sem barra fixa cobrindo conteúdo)
+- Tema escuro consistente para o piloto, com fundo cinza mineral, superfícies brancas/escuras, texto grafite e verde-petróleo nas ações principais
+- Teste novo `tests/ui-piloto.mjs` (10/10) com capturas `piloto-*.png` em desktop/tablet/celular e claro/escuro
+- Regressões: núcleo 16/16, aplicação 22/22, UI existente 10/10 + 8/8, regras 42/42 e verificação estática OK
+- Nenhuma alteração de backend, regras do Firestore, credenciais, formato dos registros ou regras de assinatura; versão e service worker em 0.22.0
+
 ## 0.21.0 — Listagem, detalhe e checklist
 - Indicador do topo corrigido para **Online/Offline** quando só há conexão do navegador; “Sincronizado” não é mais exibido sem confirmação real do envio à nuvem
 - Lista de vistorias trocou o formulário permanente por um **painel lateral “Nova vistoria”**, com foco inicial, foco preso, Esc, botão de fechar, retorno de foco e confirmação para descartar dados
